@@ -124,19 +124,16 @@ export function isMobileGPU() {
   return window.innerWidth < 700 || window.matchMedia('(pointer: coarse)').matches;
 }
 
-/** v8-style renderer — antialias-off fallback for iOS Chrome. */
+/** Exact v8 init first; antialias-off is fallback only if context creation fails. */
 export function initWebGLRenderer(canvas) {
   const mobile = isMobileGPU();
-  const tries = mobile
-    ? [{ antialias: false, alpha: false }, { antialias: true, alpha: false }]
-    : [{ antialias: true, alpha: false }, { antialias: false, alpha: false }];
-  for (const opts of tries) {
+  for (const antialias of [true, false]) {
     try {
-      const renderer = new THREE.WebGLRenderer({ canvas, ...opts });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2));
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       return { renderer, mobile };
-    } catch (_) { /* try next config */ }
+    } catch (_) { /* try without antialias */ }
   }
   return { renderer: null, mobile };
 }

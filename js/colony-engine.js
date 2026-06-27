@@ -3,8 +3,8 @@ import { MOUSE } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import { getPlanet } from './planets.js?v=16';
-import { makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize, initWebGLRenderer } from './graphics-utils.js?v=16';
+import { getPlanet } from './planets.js?v=17';
+import { makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize, initWebGLRenderer } from './graphics-utils.js?v=17';
 
 const ROVER_URL = '/assets/mars-rover.glb';
 
@@ -82,7 +82,8 @@ export class ColonyEngine {
     this.scene.add(this.camera);
     this.camera.position.copy(this._orbitCamPos);
 
-    this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
+    const resizeRoot = canvas.parentElement?.closest('#colony-screen') || canvas.parentElement;
+    this._stopResize = observeCanvasResize(resizeRoot, () => this.resize());
     this.setBuildMode(false);
     this.setViewMode('orbit');
   }
@@ -92,8 +93,12 @@ export class ColonyEngine {
     if (this.viewMode === 'orbit') {
       if (active) {
         this.controls.mouseButtons = { LEFT: null, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
+        this.controls.enableRotate = false;
+        this.controls.enablePan = false;
       } else {
         this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+        this.controls.enableRotate = true;
+        this.controls.enablePan = true;
       }
     }
   }
@@ -338,9 +343,9 @@ export class ColonyEngine {
     this.scene.add(this.ambient);
     this.sun = new THREE.DirectionalLight(0xffeedd, 1.5);
     this.sun.position.set(55, 75, 35);
-    this.sun.castShadow = true;
-    const shadowMap = this._mobileGPU ? 1024 : 2048;
-    this.sun.shadow.mapSize.set(shadowMap, shadowMap);
+    this.sun.castShadow = !this._mobileGPU;
+    if (this._mobileGPU) this.renderer.shadowMap.enabled = false;
+    else this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.camera.near = 10;
     this.sun.shadow.camera.far = 200;
     this.sun.shadow.camera.left = -70;
@@ -710,10 +715,14 @@ export class ColonyEngine {
   }
 
   resize() {
-    const parent = this.canvas.parentElement;
+    const parent = this.canvas.parentElement?.closest('#colony-screen') || this.canvas.parentElement;
     if (!parent) return;
-    const { w, h } = getParentSize(parent);
-    if (w < 1 || h < 1) return;
+    let { w, h } = getParentSize(parent);
+    if (w < 2) w = window.visualViewport?.width || window.innerWidth;
+    if (h < 2) h = window.visualViewport?.height || window.innerHeight;
+    if (w < 2 || h < 2) return;
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();

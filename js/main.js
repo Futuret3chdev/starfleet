@@ -1,17 +1,17 @@
-import { PLANETS, getPlanet } from './planets.js?v=16';
-import { PlanetSelectView } from './planet-select.js?v=16';
-import { ColonyEngine } from './colony-engine.js?v=16';
-import { BUILDINGS } from './buildings.js?v=16';
-import { getStage } from './terraform-stages.js?v=16';
-import { getMission } from './fleet-missions.js?v=16';
+import { PLANETS, getPlanet } from './planets.js?v=17';
+import { PlanetSelectView } from './planet-select.js?v=17';
+import { ColonyEngine } from './colony-engine.js?v=17';
+import { BUILDINGS } from './buildings.js?v=17';
+import { getStage } from './terraform-stages.js?v=17';
+import { getMission } from './fleet-missions.js?v=17';
 import {
   newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame,
   canAfford, isBuildingUnlocked, getBuildingLockReason, launchFleetMission, getIdleShips
-} from './game-state.js?v=16';
+} from './game-state.js?v=17';
 import {
   bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid,
   updateEventBanner, updateFleetPanel, showVictory, showStageAdvance, toast
-} from './ui.js?v=16';
+} from './ui.js?v=17';
 
 let selectView = null, colonyEngine = null, state = null;
 let selectedPlanetId = 'mars', selectedBuild = null;
@@ -133,15 +133,27 @@ function launchMission(missionId) {
 }
 
 function setupColonyInput(canvas) {
+  const onPointer = (clientX, clientY) => {
+    if (selectedBuild && colonyEngine?.viewMode === 'orbit') colonyEngine.setBuildPreview(selectedBuild, clientX, clientY);
+  };
   canvas.onpointermove = (e) => {
-    if (selectedBuild && colonyEngine?.viewMode === 'orbit') colonyEngine.setBuildPreview(selectedBuild, e.clientX, e.clientY);
+    onPointer(e.clientX, e.clientY);
     if (colonyEngine?.viewMode === 'fps' && e.buttons === 1) colonyEngine.setMobileLook(e.movementX, e.movementY);
   };
-  canvas.onclick = (e) => {
+  canvas.ontouchmove = (e) => {
+    const t = e.touches[0];
+    if (t) onPointer(t.clientX, t.clientY);
+  };
+  const onTap = (clientX, clientY) => {
     if (colonyEngine?.viewMode === 'fps') { colonyEngine.requestPointerLock(); return; }
     if (!selectedBuild || !state) return;
-    tryPlaceBuilding(e.clientX, e.clientY);
+    tryPlaceBuilding(clientX, clientY);
   };
+  canvas.onclick = (e) => onTap(e.clientX, e.clientY);
+  canvas.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0];
+    if (t && !e.defaultPrevented) onTap(t.clientX, t.clientY);
+  }, { passive: true });
   window.addEventListener('keydown', (e) => {
     colonyEngine?.setKey(e.code, true);
     if (e.code === 'KeyV') toggleFPS();
@@ -218,12 +230,34 @@ function toggleFPS() {
   if (mode === 'fps') colonyEngine.requestPointerLock();
 }
 
+function bootColonyEngine(canvas) {
+  colonyEngine?.dispose();
+  try {
+    colonyEngine = new ColonyEngine(canvas, state.planetId);
+    colonyEngine.resize();
+    return true;
+  } catch (err) {
+    console.error('ColonyEngine failed', err);
+    colonyEngine = null;
+    return false;
+  }
+}
+
 function startColonyLoop() {
   const canvas = document.getElementById('colony-canvas');
   if (!canvas) return;
-  colonyEngine?.dispose();
-  colonyEngine = new ColonyEngine(canvas, state.planetId);
-  colonyEngine.resize();
+  if (!bootColonyEngine(canvas)) {
+    toast('3D view loading — hold on…');
+    [200, 600, 1500].forEach((ms) => {
+      setTimeout(() => {
+        if (colonyEngine) return;
+        if (bootColonyEngine(canvas)) {
+          colonyEngine.syncState(state);
+          toast('Colony view ready');
+        }
+      }, ms);
+    });
+  }
   setupColonyInput(canvas);
 
   document.getElementById('explore-grid')?.addEventListener('explore-sector', (e) => {

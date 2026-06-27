@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { PLANETS } from './planets.js?v=16';
-import { makePlanetTexture, observeCanvasResize, getParentSize, initWebGLRenderer } from './graphics-utils.js?v=16';
+import { PLANETS } from './planets.js?v=17';
+import { makePlanetTexture, observeCanvasResize, getParentSize, initWebGLRenderer } from './graphics-utils.js?v=17';
 
 export class PlanetSelectView {
   constructor(canvas, onSelect) {
@@ -149,8 +149,12 @@ export class PlanetSelectView {
   resize() {
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    const { w, h } = getParentSize(parent);
-    if (w < 1 || h < 1) return;
+    let { w, h } = getParentSize(parent);
+    if (w < 2) w = window.visualViewport?.width || window.innerWidth;
+    if (h < 2) h = window.visualViewport?.height || window.innerHeight;
+    if (w < 2 || h < 2) return;
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
