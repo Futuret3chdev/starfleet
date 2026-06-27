@@ -1,11 +1,13 @@
 import { getPlanet } from './planets.js';
 import { BUILDINGS } from './buildings.js';
 
-const SAVE_KEY = 'starfeet-save-v1';
+const SAVE_KEY = 'starfeet-save-v2';
+const SAVE_KEY_LEGACY = 'starfeet-save-v1';
 
 export function newColony(planetId, colonyName = 'Outpost Alpha') {
   const planet = getPlanet(planetId);
   return {
+    version: 2,
     planetId,
     colonyName,
     tick: 0,
@@ -25,7 +27,10 @@ export function newColony(planetId, colonyName = 'Outpost Alpha') {
     sectors: generateSectors(planet),
     explored: 1,
     selectedBuild: null,
-    paused: false
+    paused: false,
+    activeEvent: null,
+    eventCooldown: 45,
+    log: []
   };
 }
 
@@ -107,7 +112,8 @@ function spawnTrucks(state, count, x = 0, z = 0) {
 export function exploreSector(state, sectorId) {
   const sector = state.sectors.find((s) => s.id === sectorId);
   if (!sector || sector.revealed) return false;
-  const cost = 80 + state.explored * 20;
+  const hasLab = state.buildings.some((b) => b.type === 'research');
+  const cost = Math.floor((80 + state.explored * 20) / (hasLab ? 1.5 : 1));
   if (state.credits < cost) return false;
   state.credits -= cost;
   sector.revealed = true;
@@ -116,25 +122,38 @@ export function exploreSector(state, sectorId) {
   if (sector.anomaly) {
     state.credits += 150;
     state.minerals += 40 + sector.resources;
+    pushLog(state, `Anomaly found: ${sector.anomaly}`);
   } else {
     state.minerals += 15 + Math.floor(sector.resources * 0.3);
+    pushLog(state, 'Sector surveyed — minerals logged');
   }
   return true;
+}
+
+function pushLog(state, msg) {
+  state.log = state.log || [];
+  state.log.unshift({ t: state.tick, msg });
+  if (state.log.length > 8) state.log.pop();
 }
 
 export function simulateTick(state, dt = 1) {
   if (state.paused) return;
   state.tick += dt;
 
+  updateEvents(state, dt);
+
   let powerGen = 0;
   let powerUse = 0;
   let harvest = 0;
   let terraformRate = 0;
 
+  const storm = state.activeEvent?.type === 'dust_storm';
+  const stormPenalty = storm ? (1 - (state.activeEvent.intensity || 0.5) * 0.6) : 1;
+
   state.buildings.forEach((b) => {
     const def = BUILDINGS[b.type];
     if (!def) return;
-    if (def.power > 0) powerGen += def.power;
+    if (def.power > 0) powerGen += def.power * (b.type === 'solar' ? stormPenalty : 1);
     else powerUse += Math.abs(def.power);
     if (def.harvest) harvest += def.harvest;
     if (def.terraform) terraformRate += def.terraform;
@@ -158,6 +177,52 @@ export function simulateTick(state, dt = 1) {
   state.population = Math.min(state.popCap, state.population + (state.food > 40 ? 0.02 : -0.05) * dt);
 
   updateTrucks(state, dt);
+}
+
+function updateEvents(state, dt) {
+  state.eventCooldown = (state.eventCooldown ?? 60) - dt;
+
+  if (state.activeEvent) {
+    state.activeEvent.remaining = (state.activeEvent.remaining || 0) - dt;
+    if (state.activeEvent.type === 'dust_storm') {
+      state.activeEvent.intensity = Math.min(1, (state.activeEvent.intensity || 0.5) + dt * 0.02);
+      if (state.activeEvent.remaining <= 10) {
+        state.activeEvent.intensity = Math.max(0, state.activeEvent.intensity - dt * 0.08);
+      }
+    }
+    if (state.activeEvent.remaining <= 0) {
+      pushLog(state, `${eventLabel(state.activeEvent)} ended`);
+      state.activeEvent = null;
+      state.eventCooldown = 50 + Math.random() * 40;
+    }
+    return;
+  }
+
+  if (state.eventCooldown > 0) return;
+
+  const planet = getPlanet(state.planetId);
+  const chance = (planet.stormChance || 0.15) * dt * 0.15;
+  if (Math.random() < chance) {
+    state.activeEvent = {
+      type: 'dust_storm',
+      remaining: 25 + Math.random() * 20,
+      intensity: 0.35 + Math.random() * 0.35
+    };
+    pushLog(state, 'DUST STORM — solar output reduced');
+  }
+}
+
+function eventLabel(ev) {
+  if (ev.type === 'dust_storm') return 'Dust storm';
+  return 'Event';
+}
+
+export function getEventMessage(state) {
+  if (!state.activeEvent) return null;
+  if (state.activeEvent.type === 'dust_storm') {
+    return `⚠ Dust Storm — solar −${Math.round((state.activeEvent.intensity || 0.5) * 60)}%`;
+  }
+  return null;
 }
 
 function updateTrucks(state, dt) {
@@ -219,7 +284,19 @@ export function saveGame(state) {
 
 export function loadGame() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    let raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      raw = localStorage.getItem(SAVE_KEY_LEGACY);
+      if (raw) {
+        const legacy = JSON.parse(raw);
+        legacy.version = 2;
+        legacy.activeEvent = null;
+        legacy.eventCooldown = 30;
+        legacy.log = [];
+        saveGame(legacy);
+        return legacy;
+      }
+    }
     return raw ? JSON.parse(raw) : null;
   } catch (_) { return null; }
 }

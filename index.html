@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=1">
+  <link rel="stylesheet" href="/css/style.css?v=2">
 </head>
 <body>
   <div id="app">
@@ -23,7 +23,7 @@
       <div class="title-content">
         <p class="title-tag">MT Ecosystem · Futuret3ch</p>
         <h1 class="title-logo">STARFEET</h1>
-        <p class="title-tag">Space Colony Strategy</p>
+        <p class="title-tag">Space Colony Strategy · v2</p>
         <nav class="title-nav">
           <button class="btn-primary" id="btn-new-game" type="button">New Expedition</button>
           <button class="btn-secondary" id="btn-continue" type="button" style="display:none">Continue Colony</button>
@@ -36,6 +36,7 @@
     <section id="select-screen" class="screen">
       <div class="select-canvas-wrap">
         <canvas id="select-canvas"></canvas>
+        <div class="canvas-hint">Click a world to select · Drag to orbit in colony view</div>
       </div>
       <aside class="select-panel">
         <button class="btn-secondary" id="btn-select-back" type="button" style="align-self:flex-start;min-width:auto;padding:0.4rem 1rem">← Back</button>
@@ -78,11 +79,15 @@
         </div>
       </header>
 
+      <div id="event-banner" class="event-banner"></div>
+
       <div class="terraform-wrap">
         <div class="terraform-label">Terraform Progress</div>
         <div class="terraform-track"><div id="terraform-bar"></div></div>
         <div id="terraform-pct">0%</div>
       </div>
+
+      <ul id="colony-log" class="colony-log"></ul>
 
       <aside class="build-panel">
         <h3>Construct</h3>
@@ -108,6 +113,6 @@
     }
   }
   </script>
-  <script type="module" src="/js/main.js?v=1"></script>
+  <script type="module" src="/js/main.js?v=2"></script>
 </body>
 </html>

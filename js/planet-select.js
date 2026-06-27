@@ -1,58 +1,138 @@
 import * as THREE from 'three';
 import { PLANETS } from './planets.js';
+import { makePlanetTexture, observeCanvasResize } from './graphics-utils.js';
 
 export class PlanetSelectView {
-  constructor(canvas) {
+  constructor(canvas, onSelect) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
-    this.camera.position.z = 28;
-    this.planets = [];
+    this.onSelect = onSelect;
     this._hovered = null;
+    this._featuredId = PLANETS[0].id;
 
-    this.scene.add(new THREE.AmbientLight(0x446688, 0.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-    sun.position.set(5, 3, 8);
-    this.scene.add(sun);
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
 
-    const count = PLANETS.length;
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x040810);
+    this.scene.fog = new THREE.FogExp2(0x040810, 0.012);
+
+    this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 300);
+    this.camera.position.set(0, 2, 22);
+
+    this._buildStars();
+    this._buildLights();
+    this.planets = this._buildPlanets();
+
+    this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
+  }
+
+  _buildStars() {
+    const geo = new THREE.BufferGeometry();
+    const n = 2500;
+    const pos = new Float32Array(n * 3);
+    const colors = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const r = 60 + Math.random() * 140;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      pos[i * 3 + 1] = r * Math.cos(phi);
+      pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      const bright = 0.5 + Math.random() * 0.5;
+      colors[i * 3] = bright;
+      colors[i * 3 + 1] = bright;
+      colors[i * 3 + 2] = bright * (0.85 + Math.random() * 0.15);
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    this.scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+      size: 1.2,
+      vertexColors: true,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.9
+    })));
+  }
+
+  _buildLights() {
+    this.scene.add(new THREE.AmbientLight(0x334466, 0.45));
+    this.sun = new THREE.DirectionalLight(0xfff4e8, 1.5);
+    this.sun.position.set(8, 4, 12);
+    this.scene.add(this.sun);
+    const rim = new THREE.DirectionalLight(0x4488ff, 0.35);
+    rim.position.set(-10, -2, -8);
+    this.scene.add(rim);
+  }
+
+  _buildPlanets() {
+    const group = new THREE.Group();
+    this.scene.add(group);
+    const entries = [];
+
     PLANETS.forEach((p, i) => {
-      const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
-      const radius = 9;
-      const geo = new THREE.SphereGeometry(2.2 - i * 0.05, 48, 48);
+      const angle = (i / PLANETS.length) * Math.PI * 2 - Math.PI / 2;
+      const orbitR = 11;
+      const radius = 1.6 - i * 0.04;
+      const tex = makePlanetTexture(p);
+
+      const geo = new THREE.SphereGeometry(radius, 64, 64);
       const mat = new THREE.MeshStandardMaterial({
-        color: p.color,
-        roughness: 0.85,
-        metalness: 0.08,
-        emissive: new THREE.Color(p.color).multiplyScalar(0.08)
+        map: tex,
+        roughness: 0.88,
+        metalness: 0.06,
+        emissive: new THREE.Color(p.color).multiplyScalar(0.04)
       });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(Math.cos(angle) * radius, Math.sin(i * 0.4) * 1.5, Math.sin(angle) * radius);
+      mesh.position.set(Math.cos(angle) * orbitR, Math.sin(i * 0.5) * 1.2, Math.sin(angle) * orbitR);
       mesh.userData.planetId = p.id;
-      this.scene.add(mesh);
-      this.planets.push({ mesh, data: p, angle, baseY: mesh.position.y });
+      group.add(mesh);
+
+      const atmo = new THREE.Mesh(
+        new THREE.SphereGeometry(radius * 1.08, 32, 32),
+        new THREE.MeshBasicMaterial({
+          color: p.accent,
+          transparent: true,
+          opacity: 0.08 + Math.min(p.atmosphere, 2) * 0.06,
+          side: THREE.BackSide
+        })
+      );
+      atmo.position.copy(mesh.position);
+      group.add(atmo);
+
+      let ringMesh = null;
+      if (p.hasRings) {
+        ringMesh = new THREE.Mesh(
+          new THREE.RingGeometry(radius * 1.4, radius * 2.1, 64),
+          new THREE.MeshBasicMaterial({
+            color: 0xccbbaa,
+            transparent: true,
+            opacity: 0.45,
+            side: THREE.DoubleSide
+          })
+        );
+        ringMesh.rotation.x = Math.PI / 2.2;
+        ringMesh.position.copy(mesh.position);
+        group.add(ringMesh);
+      }
+
+      entries.push({ mesh, atmo, ring: ringMesh, data: p, angle, orbitR, radius, baseY: mesh.position.y });
     });
 
-    const starGeo = new THREE.BufferGeometry();
-    const n = 1200;
-    const pos = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * 120;
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 80;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 120 - 30;
-    }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    this.scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.8 })));
+    this.orbitGroup = group;
+    return entries;
+  }
 
-    this._onResize = () => this.resize();
-    window.addEventListener('resize', this._onResize);
-    this.resize();
+  setFeatured(id) {
+    this._featuredId = id;
+    this._hovered = id;
   }
 
   pick(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return null;
     const x = ((clientX - rect.left) / rect.width) * 2 - 1;
     const y = -((clientY - rect.top) / rect.height) * 2 + 1;
     const ray = new THREE.Raycaster();
@@ -63,7 +143,7 @@ export class PlanetSelectView {
   }
 
   setHover(id) {
-    this._hovered = id;
+    this._hovered = id || this._featuredId;
   }
 
   resize() {
@@ -71,25 +151,44 @@ export class PlanetSelectView {
     if (!parent) return;
     const w = parent.clientWidth;
     const h = parent.clientHeight;
+    if (w < 1 || h < 1) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
 
   render(t) {
+    const featured = this.planets.find((p) => p.data.id === (this._hovered || this._featuredId)) || this.planets[0];
+
     this.planets.forEach((p, i) => {
-      p.mesh.rotation.y = t * 0.15 + i;
+      const isFeatured = p.data.id === featured.data.id;
       const hover = p.data.id === this._hovered;
-      const scale = hover ? 1.18 : 1;
+      p.mesh.rotation.y = t * 0.2 + i * 0.5;
+      const scale = isFeatured ? 1.35 : hover ? 1.15 : 1;
       p.mesh.scale.setScalar(scale);
-      p.mesh.position.y = p.baseY + Math.sin(t * 0.8 + i) * 0.25 + (hover ? 0.4 : 0);
+      const lift = isFeatured ? 1.2 : hover ? 0.5 : 0;
+      p.mesh.position.y = p.baseY + Math.sin(t * 0.9 + i) * 0.2 + lift;
+      p.atmo.position.copy(p.mesh.position);
+      p.atmo.scale.copy(p.mesh.scale).multiplyScalar(1.08);
+      if (p.ring) {
+        p.ring.position.copy(p.mesh.position);
+        p.ring.scale.copy(p.mesh.scale);
+      }
+      const emissive = isFeatured ? 0.12 : hover ? 0.08 : 0.04;
+      p.mesh.material.emissive.set(new THREE.Color(p.data.color).multiplyScalar(emissive));
     });
-    this.camera.position.x = Math.sin(t * 0.08) * 3;
+
+    this.orbitGroup.rotation.y = t * 0.06;
+    this.camera.position.x = Math.sin(t * 0.1) * 2.5;
+    this.camera.position.y = 2 + Math.sin(t * 0.15) * 0.5;
+    this.camera.lookAt(featured.mesh.position);
+    this.sun.position.set(10 + Math.sin(t * 0.05) * 2, 5, 14);
+
     this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
-    window.removeEventListener('resize', this._onResize);
+    this._stopResize?.();
     this.renderer.dispose();
   }
 }

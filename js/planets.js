@@ -12,7 +12,9 @@ export const PLANETS = [
     resources: { iron: 140, ice: 60, rare: 35 },
     terraformBase: 0,
     sky: 0x1a0a08,
+    skyTop: 0x4a1810,
     fog: 0x3d1810,
+    stormChance: 0.35,
     seed: 42
   },
   {
@@ -27,7 +29,9 @@ export const PLANETS = [
     resources: { iron: 80, ice: 40, rare: 90 },
     terraformBase: 0,
     sky: 0x020208,
+    skyTop: 0x1a1a30,
     fog: 0x1a1a22,
+    stormChance: 0.05,
     seed: 7
   },
   {
@@ -42,7 +46,10 @@ export const PLANETS = [
     resources: { iron: 50, ice: 120, rare: 70 },
     terraformBase: 2,
     sky: 0x2a1808,
+    skyTop: 0x6a4020,
     fog: 0x4a3018,
+    stormChance: 0.2,
+    hasRings: true,
     seed: 19
   },
   {
@@ -57,7 +64,9 @@ export const PLANETS = [
     resources: { iron: 40, ice: 200, rare: 110 },
     terraformBase: 0,
     sky: 0x040810,
+    skyTop: 0x284060,
     fog: 0x182838,
+    stormChance: 0.1,
     seed: 88
   },
   {
@@ -72,7 +81,9 @@ export const PLANETS = [
     resources: { iron: 70, ice: 10, rare: 130 },
     terraformBase: 0,
     sky: 0x2a2008,
+    skyTop: 0x8a6020,
     fog: 0x5a4810,
+    stormChance: 0.5,
     seed: 33
   },
   {
@@ -87,7 +98,9 @@ export const PLANETS = [
     resources: { iron: 180, ice: 90, rare: 50 },
     terraformBase: 0,
     sky: 0x080810,
+    skyTop: 0x202030,
     fog: 0x181820,
+    stormChance: 0.02,
     seed: 55
   }
 ];

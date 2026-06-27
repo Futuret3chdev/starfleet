@@ -1,6 +1,6 @@
 import { BUILDINGS, BUILD_ORDER } from './buildings.js';
 import { getPlanet } from './planets.js';
-import { canAfford } from './game-state.js';
+import { canAfford, getEventMessage } from './game-state.js';
 
 export function bindUI(handlers) {
   const screens = {
@@ -38,7 +38,28 @@ export function bindUI(handlers) {
 
   document.getElementById('explore-btn')?.addEventListener('click', () => handlers.onExplore?.());
 
-  return { show, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid, toast };
+  return { show, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid, updateEventBanner, toast };
+}
+
+export function updateEventBanner(state) {
+  const banner = document.getElementById('event-banner');
+  const log = document.getElementById('colony-log');
+  if (!state) return;
+
+  const msg = getEventMessage(state);
+  if (banner) {
+    if (msg) {
+      banner.textContent = msg;
+      banner.classList.add('active', 'storm');
+    } else {
+      banner.classList.remove('active', 'storm');
+      banner.textContent = '';
+    }
+  }
+
+  if (log && state.log?.length) {
+    log.innerHTML = state.log.slice(0, 4).map((e) => `<li>${e.msg}</li>`).join('');
+  }
 }
 
 export function updateHUD(state) {

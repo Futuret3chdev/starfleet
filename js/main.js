@@ -2,9 +2,9 @@ import { PLANETS, getPlanet } from './planets.js';
 import { PlanetSelectView } from './planet-select.js';
 import { ColonyEngine } from './colony-engine.js';
 import {
-  newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame
+  newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame, getEventMessage
 } from './game-state.js';
-import { bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid, toast } from './ui.js';
+import { bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid, updateEventBanner, toast } from './ui.js';
 
 let selectView = null;
 let colonyEngine = null;
@@ -40,8 +40,11 @@ function startPlanetSelect() {
   stopColony();
   const canvas = document.getElementById('select-canvas');
   if (!canvas) return;
+
+  if (selectView) selectView.dispose();
   selectView = new PlanetSelectView(canvas);
   selectedPlanetId = 'mars';
+  selectView.setFeatured(selectedPlanetId);
   updatePlanetCard(getPlanet(selectedPlanetId), 'Outpost Alpha');
 
   const cards = document.getElementById('planet-cards');
@@ -56,7 +59,7 @@ function startPlanetSelect() {
         document.querySelectorAll('.planet-card').forEach((c) => c.classList.remove('active'));
         card.classList.add('active');
         updatePlanetCard(p, document.getElementById('colony-name-input')?.value || 'Outpost Alpha');
-        selectView?.setHover(p.id);
+        selectView?.setFeatured(p.id);
       });
       cards.appendChild(card);
     });
@@ -65,7 +68,7 @@ function startPlanetSelect() {
   canvas.onmousemove = (e) => {
     const id = selectView?.pick(e.clientX, e.clientY);
     if (id) {
-      selectView.setHover(id);
+      selectView.setFeatured(id);
       selectedPlanetId = id;
       const p = getPlanet(id);
       updatePlanetCard(p, document.getElementById('colony-name-input')?.value);
@@ -75,7 +78,22 @@ function startPlanetSelect() {
     }
   };
 
+  canvas.onclick = (e) => {
+    const id = selectView?.pick(e.clientX, e.clientY);
+    if (id) {
+      selectedPlanetId = id;
+      selectView.setFeatured(id);
+      const p = getPlanet(id);
+      updatePlanetCard(p, document.getElementById('colony-name-input')?.value);
+      document.querySelectorAll('.planet-card').forEach((c) => {
+        c.classList.toggle('active', c.querySelector('strong')?.textContent === p.name);
+      });
+    }
+  };
+
   ui.show('select');
+  requestAnimationFrame(() => selectView?.resize());
+
   let t0 = performance.now();
   function loop(now) {
     if (!selectView) return;
@@ -96,7 +114,7 @@ function launchColony() {
   startColonyLoop();
   ui.show('colony');
   toast(`Colony established on ${getPlanet(selectedPlanetId).name}`);
-  setTimeout(() => toast('Build Solar Array + Habitat, then Mine & Garage for harvest trucks'), 3200);
+  setTimeout(() => toast('Build Solar + Habitat, then Mine & Garage for harvest rovers'), 3200);
 }
 
 function continueGame() {
@@ -107,7 +125,7 @@ function continueGame() {
   selectedBuild = null;
   startColonyLoop();
   ui.show('colony');
-  toast(`Welcome back, Commander`);
+  toast('Welcome back, Commander');
 }
 
 function startColonyLoop() {
@@ -140,19 +158,27 @@ function startColonyLoop() {
   updateHUD(state);
   updateBuildPanel(state, selectedBuild);
   updateExploreGrid(state);
+  updateEventBanner(state);
   lastTick = performance.now();
 
+  let renderT = 0;
   function loop(now) {
     if (!colonyEngine || !state) return;
     const dt = Math.min((now - lastTick) / 1000, 0.1);
     lastTick = now;
+    renderT += dt;
     if (dt > 0) {
+      const prevEvent = state.activeEvent?.type;
       simulateTick(state, dt);
+      if (state.activeEvent?.type === 'dust_storm' && prevEvent !== 'dust_storm') {
+        toast('Dust storm incoming — solar arrays weakened');
+      }
       colonyEngine.syncState(state);
       updateHUD(state);
+      updateEventBanner(state);
       if (state.tick % 30 < dt) saveGame(state);
     }
-    colonyEngine.render();
+    colonyEngine.render(renderT);
     rafId = requestAnimationFrame(loop);
   }
   cancelAnimationFrame(rafId);

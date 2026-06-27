@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { getPlanet } from './planets.js';
-import { BUILDINGS } from './buildings.js';
+import { makeHeightmap, makeTerrainTexture, observeCanvasResize } from './graphics-utils.js';
 
 const ROVER_URL = '/assets/mars-rover.glb';
 
@@ -14,121 +14,176 @@ export class ColonyEngine {
     this.truckMeshes = new Map();
     this.nodeMeshes = [];
     this._roverTemplate = null;
+    this.stormIntensity = 0;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.2;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(this.planet.sky);
-    this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.004);
+    this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.0035);
 
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 800);
-    this.camera.position.set(35, 42, 55);
+    this.camera.position.set(32, 38, 52);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
-    this.controls.maxPolarAngle = Math.PI / 2.1;
-    this.controls.minDistance = 15;
-    this.controls.maxDistance = 120;
-    this.controls.target.set(0, 0, 0);
+    this.controls.maxPolarAngle = Math.PI / 2.15;
+    this.controls.minDistance = 12;
+    this.controls.maxDistance = 130;
+    this.controls.target.set(0, 2, 0);
 
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
-    this.ground = null;
+    this._buildSky();
     this._buildWorld();
     this._buildLights();
+    this._buildDust();
     this._loadRover();
 
-    this._onResize = () => this.resize();
-    window.addEventListener('resize', this._onResize);
-    this.resize();
+    this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
+  }
+
+  _buildSky() {
+    const skyGeo = new THREE.SphereGeometry(400, 32, 16);
+    const skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: {
+        topColor: { value: new THREE.Color(this.planet.skyTop || this.planet.sky) },
+        bottomColor: { value: new THREE.Color(this.planet.fog) },
+        offset: { value: 20 },
+        exponent: { value: 0.55 }
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = wp.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition + offset).y;
+          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+        }
+      `
+    });
+    this.scene.add(new THREE.Mesh(skyGeo, skyMat));
   }
 
   _buildWorld() {
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 2000;
+    const starCount = 1800;
     const pos = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
-      const r = 200 + Math.random() * 300;
+      const r = 180 + Math.random() * 200;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      pos[i * 3 + 1] = r * Math.cos(phi) * 0.4 + 80;
+      pos[i * 3 + 1] = r * Math.cos(phi) * 0.35 + 100;
       pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
     }
     starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, sizeAttenuation: true }));
-    this.scene.add(stars);
+    this.scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.4, sizeAttenuation: true })));
 
-    const groundTex = this._makeTerrainTexture();
+    const hm = makeHeightmap(this.planet);
+    const segments = 128;
+    const geo = new THREE.PlaneGeometry(200, 200, segments, segments);
+    const verts = geo.attributes.position;
+    for (let i = 0; i < verts.count; i++) {
+      const ix = i % (segments + 1);
+      const iy = Math.floor(i / (segments + 1));
+      const hx = Math.floor((ix / segments) * (hm.size - 1));
+      const hy = Math.floor((iy / segments) * (hm.size - 1));
+      verts.setY(i, hm.data[hy * hm.size + hx] * 5);
+    }
+    geo.computeVertexNormals();
+
+    const groundTex = makeTerrainTexture(this.planet);
     const groundMat = new THREE.MeshStandardMaterial({
       map: groundTex,
-      roughness: 0.92,
-      metalness: 0.05,
+      roughness: 0.9,
+      metalness: 0.04,
       color: new THREE.Color(this.planet.color)
     });
     this.groundMat = groundMat;
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(220, 220, 64, 64), groundMat);
+    this.ground = new THREE.Mesh(geo, groundMat);
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
     const pad = new THREE.Mesh(
-      new THREE.CircleGeometry(12, 48),
-      new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.7, metalness: 0.3 })
+      new THREE.CircleGeometry(11, 48),
+      new THREE.MeshStandardMaterial({ color: 0x3a4a5a, roughness: 0.65, metalness: 0.35, emissive: 0x112233, emissiveIntensity: 0.15 })
     );
     pad.rotation.x = -Math.PI / 2;
-    pad.position.y = 0.04;
+    pad.position.y = 0.12;
     this.scene.add(pad);
 
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(11.5, 12.5, 64),
-      new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+      new THREE.RingGeometry(10.5, 11.5, 64),
+      new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.06;
+    ring.position.y = 0.18;
     this.scene.add(ring);
   }
 
-  _makeTerrainTexture() {
-    const c = document.createElement('canvas');
-    c.width = c.height = 512;
-    const ctx = c.getContext('2d');
-    const col = new THREE.Color(this.planet.color);
-    const r = Math.floor(col.r * 255), g = Math.floor(col.g * 255), b = Math.floor(col.b * 255);
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fillRect(0, 0, 512, 512);
-    for (let i = 0; i < 8000; i++) {
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      const shade = Math.random() * 40 - 20;
-      ctx.fillStyle = `rgb(${r + shade},${g + shade * 0.6},${b + shade * 0.4})`;
-      ctx.fillRect(x, y, 2 + Math.random() * 3, 2 + Math.random() * 3);
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(12, 12);
-    return tex;
+  _buildLights() {
+    this.ambient = new THREE.AmbientLight(0x445566, 0.55);
+    this.scene.add(this.ambient);
+    this.sun = new THREE.DirectionalLight(0xffeedd, 1.5);
+    this.sun.position.set(55, 75, 35);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.camera.near = 10;
+    this.sun.shadow.camera.far = 200;
+    this.sun.shadow.camera.left = -70;
+    this.sun.shadow.camera.right = 70;
+    this.sun.shadow.camera.top = 70;
+    this.sun.shadow.camera.bottom = -70;
+    this.scene.add(this.sun);
+    this.scene.add(new THREE.HemisphereLight(0x88aacc, 0x221108, 0.5));
   }
 
-  _buildLights() {
-    this.scene.add(new THREE.AmbientLight(0x334466, 0.5));
-    const sun = new THREE.DirectionalLight(0xffeedd, 1.4);
-    sun.position.set(60, 80, 40);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 200;
-    sun.shadow.camera.left = -60;
-    sun.shadow.camera.right = 60;
-    sun.shadow.camera.top = 60;
-    sun.shadow.camera.bottom = -60;
-    this.scene.add(sun);
-    const fill = new THREE.HemisphereLight(0x88aacc, 0x221108, 0.45);
-    this.scene.add(fill);
+  _buildDust() {
+    const count = 600;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 120;
+      pos[i * 3 + 1] = Math.random() * 8 + 1;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 120;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.dustMat = new THREE.PointsMaterial({
+      color: new THREE.Color(this.planet.color).lerp(new THREE.Color(0xaaaaaa), 0.5),
+      size: 0.6,
+      transparent: true,
+      opacity: 0,
+      sizeAttenuation: true
+    });
+    this.dust = new THREE.Points(geo, this.dustMat);
+    this.scene.add(this.dust);
+  }
+
+  setStormIntensity(v) {
+    this.stormIntensity = Math.max(0, Math.min(1, v));
+    this.dustMat.opacity = this.stormIntensity * 0.55;
+    this.scene.fog.density = 0.0035 + this.stormIntensity * 0.012;
+    this.sun.intensity = 1.5 * (1 - this.stormIntensity * 0.55);
+    this.ambient.intensity = 0.55 * (1 - this.stormIntensity * 0.3);
   }
 
   async _loadRover() {
@@ -141,11 +196,25 @@ export class ColonyEngine {
       const box = new THREE.Box3().setFromObject(this._roverTemplate);
       const size = new THREE.Vector3();
       box.getSize(size);
-      const s = 2.2 / Math.max(size.x, size.y, size.z);
-      this._roverScale = s;
+      this._roverScale = 2.2 / Math.max(size.x, size.y, size.z);
     } catch (e) {
       console.warn('Rover GLB fallback', e);
     }
+  }
+
+  _terrainHeight(x, z) {
+    if (!this.ground) return 0;
+    const geo = this.ground.geometry;
+    const segments = 128;
+    const half = 100;
+    const u = (x + half) / 200;
+    const v = (z + half) / 200;
+    const ix = Math.floor(u * segments);
+    const iy = Math.floor(v * segments);
+    const idx = iy * (segments + 1) + ix;
+    const verts = geo.attributes.position;
+    if (idx >= verts.count) return 0;
+    return verts.getY(idx);
   }
 
   _createBuildingMesh(type) {
@@ -155,7 +224,7 @@ export class ColonyEngine {
     if (type === 'habitat') {
       const dome = new THREE.Mesh(
         new THREE.SphereGeometry(2.2, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-        new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.3, metalness: 0.5, transparent: true, opacity: 0.75 })
+        new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.3, metalness: 0.5, transparent: true, opacity: 0.78 })
       );
       const base = new THREE.Mesh(
         new THREE.CylinderGeometry(2.2, 2.4, 1.2, 24),
@@ -168,7 +237,7 @@ export class ColonyEngine {
       for (let i = 0; i < 4; i++) {
         const panel = new THREE.Mesh(
           new THREE.BoxGeometry(3, 0.08, 1.2),
-          new THREE.MeshStandardMaterial({ color: 0x1a2a4a, roughness: 0.2, metalness: 0.8, emissive: 0x2244aa, emissiveIntensity: 0.15 })
+          new THREE.MeshStandardMaterial({ color: 0x1a2a4a, roughness: 0.2, metalness: 0.8, emissive: 0x2244aa, emissiveIntensity: 0.2 })
         );
         panel.position.set((i - 1.5) * 1.6, 0.8, 0);
         panel.rotation.x = -0.4;
@@ -185,7 +254,7 @@ export class ColonyEngine {
       tower.position.y = 1.75;
       const drill = new THREE.Mesh(
         new THREE.ConeGeometry(0.6, 2, 8),
-        new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.3, metalness: 0.7 })
+        new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.35, metalness: 0.7 })
       );
       drill.position.y = 3.8;
       grp.add(tower, drill);
@@ -197,19 +266,19 @@ export class ColonyEngine {
       bay.position.y = 1.25;
       const door = new THREE.Mesh(
         new THREE.PlaneGeometry(3.5, 2),
-        new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.2, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+        new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.25, transparent: true, opacity: 0.65, side: THREE.DoubleSide })
       );
       door.position.set(0, 1.2, 2.01);
       grp.add(bay, door);
     } else if (type === 'terraform') {
       const core = new THREE.Mesh(
         new THREE.CylinderGeometry(1.5, 2, 4, 12),
-        new THREE.MeshStandardMaterial({ color: 0x2a5a3a, emissive: 0x44ff88, emissiveIntensity: 0.25, metalness: 0.4 })
+        new THREE.MeshStandardMaterial({ color: 0x2a5a3a, emissive: 0x44ff88, emissiveIntensity: 0.3, metalness: 0.4 })
       );
       core.position.y = 2;
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(2.5, 0.15, 8, 32),
-        new THREE.MeshStandardMaterial({ color: 0x00ffaa, emissive: 0x00ffaa, emissiveIntensity: 0.5 })
+        new THREE.MeshStandardMaterial({ color: 0x00ffaa, emissive: 0x00ffaa, emissiveIntensity: 0.55 })
       );
       ring.rotation.x = Math.PI / 2;
       ring.position.y = 3.5;
@@ -242,18 +311,21 @@ export class ColonyEngine {
   syncState(state) {
     const tf = state.terraform / 100;
     const barren = new THREE.Color(this.planet.color);
-    const lush = new THREE.Color(0x3a6b3a);
-    this.groundMat.color.copy(barren).lerp(lush, tf * 0.65);
-    this.groundMat.emissive = new THREE.Color(0x000000);
-    if (tf > 0.2) {
-      this.groundMat.emissive.set(0x0a1a0a);
-      this.groundMat.emissiveIntensity = tf * 0.15;
+    const lush = new THREE.Color(0x3a7a3a);
+    this.groundMat.color.copy(barren).lerp(lush, tf * 0.7);
+    if (tf > 0.15) {
+      this.groundMat.emissive = new THREE.Color(0x0a1a0a);
+      this.groundMat.emissiveIntensity = tf * 0.18;
     }
+
+    const storm = state.activeEvent?.type === 'dust_storm' ? (state.activeEvent.intensity || 0.5) : 0;
+    this.setStormIntensity(storm);
 
     state.buildings.forEach((b) => {
       if (this.buildingMeshes.has(b.id)) return;
       const mesh = this._createBuildingMesh(b.type);
-      mesh.position.set(b.x, 0, b.z);
+      const y = this._terrainHeight(b.x, b.z);
+      mesh.position.set(b.x, y, b.z);
       this.scene.add(mesh);
       this.buildingMeshes.set(b.id, mesh);
     });
@@ -262,21 +334,22 @@ export class ColonyEngine {
       if (this.nodeMeshes[i]) {
         const m = this.nodeMeshes[i];
         const ratio = 1 - node.depleted / node.max;
-        m.material.emissiveIntensity = 0.2 + ratio * 0.4;
+        m.material.emissiveIntensity = 0.25 + ratio * 0.45;
         m.scale.setScalar(0.5 + ratio * 0.5);
         return;
       }
+      const y = this._terrainHeight(node.x, node.z);
       const crystal = new THREE.Mesh(
         new THREE.OctahedronGeometry(1.2, 0),
         new THREE.MeshStandardMaterial({
           color: 0xffaa44,
           emissive: 0xff6600,
-          emissiveIntensity: 0.5,
+          emissiveIntensity: 0.55,
           metalness: 0.6,
           roughness: 0.2
         })
       );
-      crystal.position.set(node.x, 1.2, node.z);
+      crystal.position.set(node.x, y + 1.4, node.z);
       crystal.castShadow = true;
       this.scene.add(crystal);
       this.nodeMeshes[i] = crystal;
@@ -297,13 +370,15 @@ export class ColonyEngine {
         this.scene.add(mesh);
         this.truckMeshes.set(truck.id, mesh);
       }
-      mesh.position.set(truck.x, 0.3, truck.z);
+      const y = this._terrainHeight(truck.x, truck.z);
+      mesh.position.set(truck.x, y + 0.35, truck.z);
       mesh.rotation.y = truck.t || 0;
     });
   }
 
   pickGround(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
+    if (rect.width < 1) return null;
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
@@ -325,13 +400,21 @@ export class ColonyEngine {
     this.camera.updateProjectionMatrix();
   }
 
-  render() {
+  render(t = 0) {
+    if (this.dust && this.stormIntensity > 0.05) {
+      const pos = this.dust.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        pos.setX(i, pos.getX(i) + Math.sin(t + i) * 0.04 * this.stormIntensity);
+        pos.setZ(i, pos.getZ(i) + Math.cos(t * 0.7 + i) * 0.03 * this.stormIntensity);
+      }
+      pos.needsUpdate = true;
+    }
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
-    window.removeEventListener('resize', this._onResize);
+    this._stopResize?.();
     this.renderer.dispose();
   }
 }

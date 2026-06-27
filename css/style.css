@@ -126,8 +126,33 @@ html, body {
   flex: 1;
   position: relative;
   min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 80, 120, 0.12), #040810);
 }
-#select-canvas { width: 100%; height: 100%; display: block; }
+#select-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.canvas-hint {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 2;
+  background: rgba(6, 10, 18, 0.6);
+  padding: 0.35rem 0.8rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
 
 .select-panel {
   width: min(380px, 40vw);
@@ -206,8 +231,15 @@ html, body {
 .colony-canvas-wrap {
   position: absolute;
   inset: 0;
+  background: #060a12;
 }
-#colony-canvas { width: 100%; height: 100%; display: block; }
+#colony-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 
 .hud-top {
   position: absolute;
@@ -260,10 +292,55 @@ html, body {
 }
 .icon-btn:hover { border-color: var(--accent); }
 
+/* Events */
+.event-banner {
+  position: absolute;
+  top: 4.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  z-index: 12;
+  padding: 0.45rem 1.2rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-family: var(--display);
+  letter-spacing: 0.06em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s, transform 0.35s;
+}
+.event-banner.active {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.event-banner.storm {
+  background: rgba(80, 40, 10, 0.85);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+}
+
+.colony-log {
+  position: absolute;
+  right: 1rem;
+  top: 5rem;
+  width: min(220px, 35vw);
+  list-style: none;
+  z-index: 10;
+  pointer-events: none;
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.colony-log li {
+  background: rgba(6, 10, 18, 0.55);
+  border-left: 2px solid var(--border);
+  padding: 0.2rem 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
 /* Terraform bar */
 .terraform-wrap {
   position: absolute;
-  top: 4.5rem;
+  top: 7rem;
   left: 50%;
   transform: translateX(-50%);
   width: min(320px, 60vw);
@@ -425,6 +502,9 @@ html, body {
 
 @media (max-width: 700px) {
   #select-screen { flex-direction: column; }
-  .select-panel { width: 100%; max-height: 45vh; border-left: none; border-top: 1px solid var(--border); }
+  .select-canvas-wrap { min-height: 50vh; flex: 1; }
+  .select-panel { width: 100%; max-height: 42vh; border-left: none; border-top: 1px solid var(--border); flex-shrink: 0; }
   .build-panel { left: 0.5rem; right: 0.5rem; width: auto; }
+  .colony-log { display: none; }
+  .terraform-wrap { top: 6.5rem; }
 }
