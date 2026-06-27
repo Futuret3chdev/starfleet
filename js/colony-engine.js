@@ -4,10 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { getPlanet } from './planets.js';
-import {
-  makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize,
-  createWebGLRenderer
-} from './graphics-utils.js';
+import { makeHeightmap, makeTerrainTexture, observeCanvasResize } from './graphics-utils.js';
 
 const ROVER_URL = '/assets/mars-rover.glb';
 
@@ -27,91 +24,62 @@ export class ColonyEngine {
     this._fpsYaw = 0;
     this._fpsPitch = 0;
     this._lastTf = -1;
-    this._contextLost = false;
 
-    const gpu = createWebGLRenderer(canvas);
-    this.renderer = gpu.renderer;
-    if (this.renderer) {
-      this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.2;
-    }
-
-    if (!this.renderer) {
-      this._showFallback('3D view unavailable — tap 🔨 Build below to play');
-      return;
-    }
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.2;
 
     this.scene = new THREE.Scene();
-      this.scene.background = new THREE.Color(this.planet.sky);
-      this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.0035);
-      this._barrenColor = new THREE.Color(this.planet.color);
-      this._lushColor = new THREE.Color(0x3d8a3d);
-      this._skyBarren = new THREE.Color(this.planet.sky);
-      this._skyLush = new THREE.Color(0x6ab8e8);
+    this.scene.background = new THREE.Color(this.planet.sky);
+    this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.0035);
+    this._barrenColor = new THREE.Color(this.planet.color);
+    this._lushColor = new THREE.Color(0x3d8a3d);
+    this._skyBarren = new THREE.Color(this.planet.sky);
+    this._skyLush = new THREE.Color(0x6ab8e8);
 
-      this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 800);
-      this.camera.position.set(28, 34, 48);
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 800);
+    this.camera.position.set(28, 34, 48);
 
-      this.controls = new OrbitControls(this.camera, canvas);
-      this.controls.enableDamping = true;
-      this.controls.maxPolarAngle = Math.PI / 2.05;
-      this.controls.minDistance = 12;
-      this.controls.maxDistance = 130;
-      this.controls.target.set(0, 1, 0);
+    this.controls = new OrbitControls(this.camera, canvas);
+    this.controls.enableDamping = true;
+    this.controls.maxPolarAngle = Math.PI / 2.05;
+    this.controls.minDistance = 12;
+    this.controls.maxDistance = 130;
+    this.controls.target.set(0, 1, 0);
 
-      this.fpsPivot = new THREE.Object3D();
-      this.fpsPivot.position.set(0, 2.4, 18);
-      this.scene.add(this.fpsPivot);
-      this.fpsPivot.add(this.camera);
-      this.camera.position.set(0, 0, 0);
+    this.fpsPivot = new THREE.Object3D();
+    this.fpsPivot.position.set(0, 2.4, 18);
+    this.scene.add(this.fpsPivot);
+    this.fpsPivot.add(this.camera);
+    this.camera.position.set(0, 0, 0);
 
-      try {
-        this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
-      } catch (_) {
-        this.pointerLock = null;
-      }
+    this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
 
-      this.raycaster = new THREE.Raycaster();
-      this.pointer = new THREE.Vector2();
-      this._buildSky();
-      this._buildWorld();
-      this._buildVegetation();
-      this._buildWater();
-      this._buildOrbitPaths();
-      this._buildLights();
-      this._buildDust();
-      this._buildPreviewRing();
-      this._loadRover();
+    this.raycaster = new THREE.Raycaster();
+    this.pointer = new THREE.Vector2();
+    this._buildSky();
+    this._buildWorld();
+    this._buildVegetation();
+    this._buildWater();
+    this._buildOrbitPaths();
+    this._buildLights();
+    this._buildDust();
+    this._buildPreviewRing();
+    this._loadRover();
 
-      this._orbitCamPos = new THREE.Vector3(28, 34, 48);
-      this._orbitTarget = new THREE.Vector3(0, 1, 0);
-      this.camera.removeFromParent();
-      this.scene.add(this.camera);
-      this.camera.position.copy(this._orbitCamPos);
+    this._orbitCamPos = new THREE.Vector3(28, 34, 48);
+    this._orbitTarget = new THREE.Vector3(0, 1, 0);
+    this.camera.removeFromParent();
+    this.scene.add(this.camera);
+    this.camera.position.copy(this._orbitCamPos);
 
     this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
     this.setBuildMode(false);
     this.setViewMode('orbit');
-
-    this._onContextLost = (e) => {
-      e.preventDefault();
-      this._contextLost = true;
-      this._showFallback('3D paused — GPU memory low. Menus still work.');
-    };
-    canvas.addEventListener('webglcontextlost', this._onContextLost);
-  }
-
-  get isReady() {
-    return !!this.renderer && !this._contextLost;
-  }
-
-  _showFallback(msg) {
-    const fb = document.getElementById('colony-fallback');
-    const wrap = this.canvas?.parentElement;
-    if (fb) { fb.hidden = false; fb.textContent = msg; }
-    wrap?.classList.add('fallback-2d');
   }
 
   setBuildMode(active) {
@@ -140,7 +108,7 @@ export class ColonyEngine {
       this.fpsPivot.rotation.set(0, this._fpsYaw, 0);
       this.canvas.classList.add('fps-mode');
     } else {
-      this.pointerLock?.unlock();
+      this.pointerLock.unlock();
       const fp = this.fpsPivot.position.clone();
       this.camera.removeFromParent();
       this.scene.add(this.camera);
@@ -161,7 +129,7 @@ export class ColonyEngine {
 
   requestPointerLock() {
     if (this.viewMode === 'fps' && !('ontouchstart' in window)) {
-      this.pointerLock?.lock();
+      this.pointerLock.lock();
     }
   }
 
@@ -278,7 +246,6 @@ export class ColonyEngine {
 
     const hm = makeHeightmap(this.planet);
     const segments = 128;
-    this._terrainSegments = segments;
     const geo = new THREE.PlaneGeometry(200, 200, segments, segments);
     const verts = geo.attributes.position;
     this._groundVerts = verts;
@@ -367,7 +334,7 @@ export class ColonyEngine {
     this.sun = new THREE.DirectionalLight(0xffeedd, 1.5);
     this.sun.position.set(55, 75, 35);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.camera.near = 10;
     this.sun.shadow.camera.far = 200;
     this.sun.shadow.camera.left = -70;
@@ -425,7 +392,7 @@ export class ColonyEngine {
 
   _terrainHeight(x, z) {
     if (!this.ground) return 0;
-    const segments = this._terrainSegments || 128;
+    const segments = 128;
     const half = 100;
     const u = THREE.MathUtils.clamp((x + half) / 200, 0, 1);
     const v = THREE.MathUtils.clamp((z + half) / 200, 0, 1);
@@ -736,18 +703,17 @@ export class ColonyEngine {
   }
 
   resize() {
-    if (!this.renderer) return;
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    const { w, h } = getParentSize(parent);
-    if (w < 2 || h < 2) return;
+    const w = parent.clientWidth;
+    const h = parent.clientHeight;
+    if (w < 1 || h < 1) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
 
   render(t = 0, dt = 0.016) {
-    if (!this.isReady) return;
     this._updateFPS(dt);
     if (this.dust && this.stormIntensity > 0.05) {
       const pos = this.dust.geometry.attributes.position;
@@ -764,8 +730,7 @@ export class ColonyEngine {
 
   dispose() {
     this._stopResize?.();
-    this.canvas?.removeEventListener('webglcontextlost', this._onContextLost);
     this.pointerLock?.unlock();
-    this.renderer?.dispose();
+    this.renderer.dispose();
   }
 }

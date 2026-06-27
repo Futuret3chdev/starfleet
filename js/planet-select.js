@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PLANETS } from './planets.js';
-import { makePlanetTexture, observeCanvasResize, getParentSize, createWebGLRenderer } from './graphics-utils.js';
+import { makePlanetTexture, observeCanvasResize } from './graphics-utils.js';
 
 export class PlanetSelectView {
   constructor(canvas, onSelect) {
@@ -9,9 +9,9 @@ export class PlanetSelectView {
     this._hovered = null;
     this._featuredId = PLANETS[0].id;
 
-    const gpu = createWebGLRenderer(canvas);
-    this.renderer = gpu.renderer;
-    if (!this.renderer) throw new Error('WebGL unavailable');
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
 
@@ -149,8 +149,9 @@ export class PlanetSelectView {
   resize() {
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    const { w, h } = getParentSize(parent);
-    if (w < 2 || h < 2) return;
+    const w = parent.clientWidth;
+    const h = parent.clientHeight;
+    if (w < 1 || h < 1) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();

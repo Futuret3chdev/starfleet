@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#060a12">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Starfleet">
@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=13">
+  <link rel="stylesheet" href="/css/style.css?v=14">
 </head>
 <body>
   <div id="app">
@@ -23,7 +23,7 @@
       <div class="title-content">
         <p class="title-tag">MT Ecosystem · Futuret3ch</p>
         <h1 class="title-logo">STARFLEET</h1>
-        <p class="title-tag">Space Colony Strategy · v8</p>
+        <p class="title-tag">Space Colony Strategy · v14</p>
         <nav class="title-nav">
           <button class="btn-primary" id="btn-new-game" type="button">New Expedition</button>
           <button class="btn-secondary" id="btn-continue" type="button" style="display:none">Continue Colony</button>
@@ -58,10 +58,8 @@
     <section id="colony-screen" class="screen">
       <div class="colony-canvas-wrap">
         <canvas id="colony-canvas"></canvas>
-        <p id="colony-fallback" class="colony-fallback" hidden>3D view unavailable — menus still work below</p>
       </div>
 
-      <div class="colony-ui">
       <header class="hud-top">
         <div class="hud-brand">
           <div id="hud-colony">Outpost Alpha</div>
@@ -142,33 +140,24 @@
         <p class="mobile-hint">Drag right side to look · Joystick to walk</p>
       </div>
 
-      <nav id="mobile-nav" class="mobile-nav" aria-label="Colony controls">
-        <button type="button" id="mob-build">🔨 Build</button>
-        <button type="button" id="mob-fleet">🛸 Fleet</button>
-        <button type="button" id="mob-explore">🗺 Explore</button>
-        <button type="button" id="mob-menu">☰ Menu</button>
-      </nav>
+      <div id="stage-modal" class="stage-modal">
+        <div class="stage-card">
+          <p class="stage-kicker">Phase Advanced</p>
+          <h2 id="stage-modal-title">🌫 Atmosphere</h2>
+          <p id="stage-modal-msg"></p>
+          <button class="btn-primary" id="btn-stage-close" type="button">Continue Terraforming</button>
+        </div>
+      </div>
+
+      <div id="victory-modal" class="victory-modal">
+        <div class="victory-card">
+          <h2>🌍 Eden World Achieved!</h2>
+          <p id="victory-msg"></p>
+          <button class="btn-primary" id="btn-victory-close" type="button">Continue Command</button>
+        </div>
       </div>
     </section>
 
-    <div id="stage-modal" class="stage-modal">
-      <div class="stage-card">
-        <p class="stage-kicker">Phase Advanced</p>
-        <h2 id="stage-modal-title">🌫 Atmosphere</h2>
-        <p id="stage-modal-msg"></p>
-        <button class="btn-primary" id="btn-stage-close" type="button">Continue Terraforming</button>
-      </div>
-    </div>
-
-    <div id="victory-modal" class="victory-modal">
-      <div class="victory-card">
-        <h2>🌍 Eden World Achieved!</h2>
-        <p id="victory-msg"></p>
-        <button class="btn-primary" id="btn-victory-close" type="button">Continue Command</button>
-      </div>
-    </div>
-
-    <div id="boot-error" class="boot-error" hidden></div>
     <div id="toast"></div>
   </div>
 
@@ -180,6 +169,6 @@
     }
   }
   </script>
-  <script type="module" src="/js/main.js?v=13"></script>
+  <script type="module" src="/js/main.js?v=14"></script>
 </body>
 </html>

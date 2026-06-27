@@ -8,7 +8,6 @@ import {
   newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame,
   canAfford, isBuildingUnlocked, getBuildingLockReason, launchFleetMission, getIdleShips
 } from './game-state.js';
-
 import {
   bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid,
   updateEventBanner, updateFleetPanel, showVictory, showStageAdvance, toast
@@ -18,13 +17,7 @@ let selectView = null, colonyEngine = null, state = null;
 let selectedPlanetId = 'mars', selectedBuild = null;
 let rafId = null, lastTick = 0, ui = null;
 
-function showBootError(msg) {
-  const el = document.getElementById('boot-error');
-  if (el) { el.hidden = false; el.textContent = msg; }
-}
-
 function init() {
-  try {
   ui = bindUI({
     onNewGame: () => startPlanetSelect(),
     onContinue: continueGame,
@@ -43,10 +36,6 @@ function init() {
   });
   ui.show('title');
   document.getElementById('btn-continue').style.display = loadGame() ? '' : 'none';
-  } catch (err) {
-    console.error(err);
-    showBootError('Starfleet failed to start. Try refreshing or a different browser.');
-  }
 }
 
 function startPlanetSelect() {
@@ -54,13 +43,7 @@ function startPlanetSelect() {
   const canvas = document.getElementById('select-canvas');
   if (!canvas) return;
   if (selectView) selectView.dispose();
-  try {
-    selectView = new PlanetSelectView(canvas);
-  } catch (err) {
-    console.error('PlanetSelectView failed', err);
-    toast('Planet preview unavailable — pick a world from the list below');
-    selectView = null;
-  }
+  selectView = new PlanetSelectView(canvas);
   selectedPlanetId = 'mars';
   selectView.setFeatured(selectedPlanetId);
   updatePlanetCard(getPlanet(selectedPlanetId), 'Outpost Alpha');
@@ -105,11 +88,7 @@ function launchColony() {
   ui.show('colony');
   beginColonyAfterLayout();
   toast(`Colony established on ${getPlanet(selectedPlanetId).name}`);
-  if (window.matchMedia('(max-width: 700px)').matches) {
-    setTimeout(() => toast('Tap 🔨 Build at the bottom to construct & play'), 1200);
-  } else {
-    setTimeout(() => toast('7 terraform phases ahead — build, explore, launch fleets!'), 3000);
-  }
+  setTimeout(() => toast('7 terraform phases ahead — build, explore, launch fleets!'), 3000);
 }
 
 function continueGame() {
@@ -124,14 +103,7 @@ function continueGame() {
 }
 
 function beginColonyAfterLayout() {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      startColonyLoop();
-      [100, 400, 900].forEach((ms) => {
-        setTimeout(() => colonyEngine?.resize(), ms);
-      });
-    });
-  });
+  requestAnimationFrame(() => requestAnimationFrame(() => startColonyLoop()));
 }
 
 function launchMission(missionId) {
@@ -237,39 +209,12 @@ function toggleFPS() {
   if (mode === 'fps') colonyEngine.requestPointerLock();
 }
 
-function initColonyEngine(canvas) {
-  colonyEngine?.dispose();
-  const fb = document.getElementById('colony-fallback');
-  const wrap = canvas.parentElement;
-  wrap?.classList.remove('fallback-2d');
-  if (fb) fb.hidden = true;
-
-  try {
-    colonyEngine = new ColonyEngine(canvas, state.planetId);
-  } catch (err) {
-    console.error('ColonyEngine failed', err);
-    colonyEngine = null;
-  }
-
-  if (!colonyEngine?.isReady) {
-    if (fb) {
-      fb.hidden = false;
-      fb.textContent = '3D view unavailable — tap 🔨 Build below to play (game fully works)';
-    }
-    wrap?.classList.add('fallback-2d');
-  } else if (fb) {
-    fb.hidden = true;
-    wrap?.classList.remove('fallback-2d');
-  }
-  colonyEngine?.resize();
-}
-
 function startColonyLoop() {
   const canvas = document.getElementById('colony-canvas');
   if (!canvas) return;
-
-  const boot = () => initColonyEngine(canvas);
-  boot();
+  colonyEngine?.dispose();
+  colonyEngine = new ColonyEngine(canvas, state.planetId);
+  colonyEngine.resize();
   setupColonyInput(canvas);
 
   document.getElementById('explore-grid')?.addEventListener('explore-sector', (e) => {
@@ -287,7 +232,7 @@ function startColonyLoop() {
 
   let renderT = 0;
   function loop(now) {
-    if (!state) return;
+    if (!colonyEngine || !state) return;
     const dt = Math.min((now - lastTick) / 1000, 0.1);
     lastTick = now;
     renderT += dt;
@@ -310,14 +255,14 @@ function startColonyLoop() {
         toast('✦ Starfleet Hub — interstellar era!');
         saveGame(state);
       }
-      colonyEngine?.syncState(state);
+      colonyEngine.syncState(state);
       updateHUD(state);
       updateBuildPanel(state, selectedBuild);
       updateEventBanner(state);
       updateFleetPanel(state);
       if (state.tick % 25 < dt) saveGame(state);
     }
-    colonyEngine?.render(renderT, dt);
+    colonyEngine.render(renderT, dt);
     rafId = requestAnimationFrame(loop);
   }
   cancelAnimationFrame(rafId);
