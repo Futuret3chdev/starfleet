@@ -4,7 +4,8 @@ import { TERRAFORM_STAGES, getStage, getTotalProgress } from './terraform-stages
 import { FLEET_MISSIONS } from './fleet-missions.js';
 import {
   canAfford, getEventMessage, isBuildingUnlocked, getBuildingLockReason,
-  getFleetCount, getFleetCap, getIdleShips, isMissionUnlocked, syncTerraformDisplay
+  getFleetCount, getFleetCap, getIdleShips, isMissionUnlocked, syncTerraformDisplay,
+  getPowerStats
 } from './game-state.js';
 
 export function bindUI(handlers) {
@@ -204,7 +205,16 @@ export function updateHUD(state) {
   setText('hud-planet', planet.name);
   setText('res-credits', Math.floor(state.credits));
   setText('res-minerals', Math.floor(state.minerals));
-  setText('res-energy', `${Math.floor(state.energy)}/${state.energyCap}`);
+  const power = getPowerStats(state);
+  const netLabel = power.net >= 0 ? `+${Math.round(power.net)}` : `${Math.round(power.net)}`;
+  const energyEl = document.getElementById('res-energy');
+  const energyPill = energyEl?.closest('.res-pill');
+  if (energyEl) {
+    energyEl.textContent = `${Math.floor(power.stored)}/${power.cap} (${netLabel})`;
+    energyEl.title = `Stored ${Math.floor(power.stored)}/${power.cap} · Generation +${Math.round(power.gen)} · Demand −${Math.round(power.use)}`;
+  }
+  energyPill?.classList.toggle('power-deficit', power.gen > 0 && power.net < 0);
+  energyPill?.classList.toggle('power-surplus', power.net > 0);
   setText('res-pop', `${Math.floor(state.population)}/${state.popCap}`);
   setText('res-oxygen', `${Math.floor(state.oxygen)}%`);
   setText('res-food', `${Math.floor(state.food)}%`);

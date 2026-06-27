@@ -17,8 +17,8 @@ export const BUILDINGS = {
     icon: '☀️',
     category: 'colony',
     cost: { credits: 150, minerals: 25 },
-    power: 30,
-    desc: 'Generates energy from local starlight'
+    power: 40,
+    desc: 'Generates +40 power — each array also raises storage cap'
   },
   farm: {
     id: 'farm',

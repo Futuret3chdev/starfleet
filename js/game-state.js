@@ -96,6 +96,39 @@ export function syncTerraformDisplay(state) {
   state.terraformComplete = state.terraformStage >= 5;
 }
 
+export function syncEnergyCap(state) {
+  const solarCount = state.buildings?.filter((b) => b.type === 'solar').length || 0;
+  state.energyCap = 80 + solarCount * 60;
+}
+
+/** Generation vs demand — used by simulation and HUD. */
+export function getPowerStats(state) {
+  if (!state?.buildings) return { gen: 0, use: 0, net: 0, stored: 0, cap: 120, ratio: 1 };
+  let gen = 0;
+  let use = 0;
+  let stormShield = 0;
+  const storm = state.activeEvent?.type === 'dust_storm';
+  state.buildings.forEach((b) => {
+    const def = BUILDINGS[b.type];
+    if (def?.stormShield) stormShield = Math.max(stormShield, def.stormShield);
+  });
+  const stormPenalty = storm
+    ? 1 - (state.activeEvent.intensity || 0.5) * 0.6 * (1 - stormShield)
+    : 1;
+  state.buildings.forEach((b) => {
+    const def = BUILDINGS[b.type];
+    if (!def?.power) return;
+    if (def.power > 0) gen += def.power * (b.type === 'solar' ? stormPenalty : 1);
+    else use += Math.abs(def.power);
+  });
+  syncEnergyCap(state);
+  const stored = Number.isFinite(state.energy) ? state.energy : 0;
+  const cap = state.energyCap || 120;
+  const net = gen - use;
+  const ratio = use > 0 ? Math.min(1, gen / use) : 1;
+  return { gen, use, net, stored, cap, ratio };
+}
+
 export function canAfford(state, cost) {
   return state.credits >= (cost.credits || 0) && state.minerals >= (cost.minerals || 0);
 }
@@ -206,6 +239,11 @@ export function placeBuilding(state, type, x, z) {
   if (def.truckCap) spawnTrucks(state, def.truckCap, x, z);
   if (def.fleetCap) pushLog(state, `Fleet capacity +${def.fleetCap}`);
   if (def.fleet) pushLog(state, 'Starship ready for orbit missions');
+  if (type === 'solar') {
+    syncEnergyCap(state);
+    const stats = getPowerStats(state);
+    pushLog(state, `☀️ Solar online — +${Math.round(stats.gen)} gen / −${Math.round(stats.use)} demand`);
+  }
   return true;
 }
 
@@ -303,17 +341,14 @@ export function simulateTick(state, dt = 1) {
     if (entry?.tfResult?.planetComplete) missionPlanet = true;
   });
 
-  let powerGen = 0, powerUse = 0, harvest = 0, terraformRate = 0, foodRate = 0;
+  const power = getPowerStats(state);
+  let harvest = 0, terraformRate = 0, foodRate = 0;
   let creditBoost = 1, stormShield = 0;
   const hasOrbital = state.buildings.some((b) => b.type === 'orbital_station');
 
-  const storm = state.activeEvent?.type === 'dust_storm';
   state.buildings.forEach((b) => {
     const def = BUILDINGS[b.type];
     if (!def) return;
-    const stormPenalty = storm ? (1 - (state.activeEvent.intensity || 0.5) * 0.6 * (1 - stormShield)) : 1;
-    if (def.power > 0) powerGen += def.power * (b.type === 'solar' ? stormPenalty : 1);
-    else powerUse += Math.abs(def.power);
     if (def.harvest) harvest += def.harvest;
     if (def.terraform) terraformRate += def.terraform;
     if (def.foodRate) foodRate += def.foodRate;
@@ -324,15 +359,15 @@ export function simulateTick(state, dt = 1) {
   if (hasOrbital) { creditBoost += 0.25; terraformRate += 0.05; }
 
   const passiveTerraform = 0.025 + state.population * 0.0012 + state.terraformStage * 0.008;
-  state.energy = Math.min(state.energyCap, state.energy + powerGen * dt);
-  const powerRatio = powerUse > 0 ? Math.min(1, (state.energy + powerGen * 0.5) / (powerUse + 1)) : 1;
-  state.energy = Math.max(0, state.energy - powerUse * dt);
+  state.energy = Math.max(0, Math.min(power.cap, power.stored + power.net * dt));
+  const reserveBoost = power.use > 0 ? Math.min(1, (state.energy + power.gen * 0.35) / (power.use + 1)) : 1;
+  const powerRatio = Math.min(1, Math.max(power.ratio, reserveBoost));
 
   const habitatCount = state.buildings.filter((b) => b.type === 'habitat').length;
   const tfGain = (passiveTerraform + terraformRate * powerRatio) * dt;
   const tfResult = addTerraformProgress(state, tfGain);
 
-  if (powerRatio > 0.15 || powerGen >= powerUse) {
+  if (powerRatio > 0.15 || power.gen >= power.use) {
     state.minerals += harvest * Math.max(powerRatio, 0.4) * dt * 0.5;
     state.credits += state.population * 0.85 * creditBoost * dt;
     const o2boost = 0.08 + state.terraformStage * 0.02;
@@ -400,7 +435,10 @@ function updateEvents(state, dt) {
 export function getEventMessage(state) {
   syncTerraformDisplay(state);
   if (state.planetComplete) return '✦ Starfleet Hub — interstellar missions available';
-  const stage = getStage(state.terraformStage);
+  const power = getPowerStats(state);
+  if (power.gen > 0 && power.net < 0) {
+    return `⚡ Power deficit — +${Math.round(power.gen)} gen vs −${Math.round(power.use)} demand · build more solar`;
+  }
   if ((state.fleetMissions || []).length) {
     const m = state.fleetMissions[0];
     return `🛸 ${m.name} — ${Math.ceil(m.remaining)}s remaining`;
@@ -472,8 +510,12 @@ export function loadGame() {
     const state = JSON.parse(raw);
     state.version = 4;
     state.fleetMissions = state.fleetMissions || [];
+    state.buildings = state.buildings || [];
+    if (!Number.isFinite(state.energy)) state.energy = 80;
     migrateLegacyTerraform(state);
     syncTerraformDisplay(state);
+    syncEnergyCap(state);
+    state.energy = Math.min(state.energy, state.energyCap);
     saveGame(state);
     return state;
   } catch (_) { return null; }
