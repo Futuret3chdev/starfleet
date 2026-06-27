@@ -3,11 +3,11 @@ import { MOUSE } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import { getPlanet } from './planets.js?v=18';
+import { getPlanet } from './planets.js?v=19';
 import {
   makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize,
   initWebGLRenderer, pointerLockSupported
-} from './graphics-utils.js?v=18';
+} from './graphics-utils.js?v=19';
 
 const ROVER_URL = '/assets/mars-rover.glb';
 

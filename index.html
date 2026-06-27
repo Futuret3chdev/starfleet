@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=18">
+  <link rel="stylesheet" href="/css/style.css?v=19">
 </head>
 <body>
   <div id="app">
@@ -23,7 +23,7 @@
       <div class="title-content">
         <p class="title-tag">MT Ecosystem · Futuret3ch</p>
         <h1 class="title-logo">STARFLEET</h1>
-        <p class="title-tag">Space Colony Strategy · v18</p>
+        <p class="title-tag">Space Colony Strategy · v19</p>
         <nav class="title-nav">
           <button class="btn-primary" id="btn-new-game" type="button">New Expedition</button>
           <button class="btn-secondary" id="btn-continue" type="button" style="display:none">Continue Colony</button>
@@ -140,6 +140,13 @@
         <p class="mobile-hint">Drag right side to look · Joystick to walk</p>
       </div>
 
+      <nav id="mobile-nav" class="mobile-nav" aria-label="Colony controls">
+        <button type="button" id="mob-build">🔨 Build</button>
+        <button type="button" id="mob-fleet">🛸 Fleet</button>
+        <button type="button" id="mob-explore">🗺 Explore</button>
+        <button type="button" id="mob-menu">☰ Menu</button>
+      </nav>
+
       <div id="stage-modal" class="stage-modal">
         <div class="stage-card">
           <p class="stage-kicker">Phase Advanced</p>
@@ -169,6 +176,6 @@
     }
   }
   </script>
-  <script type="module" src="/js/main.js?v=18"></script>
+  <script type="module" src="/js/main.js?v=19"></script>
 </body>
 </html>

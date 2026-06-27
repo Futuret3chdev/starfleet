@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { PLANETS } from './planets.js?v=18';
-import { makePlanetTexture, observeCanvasResize, getParentSize, initWebGLRenderer } from './graphics-utils.js?v=18';
+import { PLANETS } from './planets.js?v=19';
+import { makePlanetTexture, observeCanvasResize, getParentSize, initWebGLRenderer } from './graphics-utils.js?v=19';
 
 export class PlanetSelectView {
   constructor(canvas, onSelect) {

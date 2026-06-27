@@ -1,12 +1,12 @@
-import { BUILDINGS, BUILD_ORDER, BUILD_CATEGORIES } from './buildings.js?v=18';
-import { getPlanet } from './planets.js?v=18';
-import { TERRAFORM_STAGES, getStage, getTotalProgress } from './terraform-stages.js?v=18';
-import { FLEET_MISSIONS } from './fleet-missions.js?v=18';
+import { BUILDINGS, BUILD_ORDER, BUILD_CATEGORIES } from './buildings.js?v=19';
+import { getPlanet } from './planets.js?v=19';
+import { TERRAFORM_STAGES, getStage, getTotalProgress } from './terraform-stages.js?v=19';
+import { FLEET_MISSIONS } from './fleet-missions.js?v=19';
 import {
   canAfford, getEventMessage, isBuildingUnlocked, getBuildingLockReason,
   getFleetCount, getFleetCap, getIdleShips, isMissionUnlocked, syncTerraformDisplay,
   getPowerStats
-} from './game-state.js?v=18';
+} from './game-state.js?v=19';
 
 export function bindUI(handlers) {
   const screens = {
@@ -47,22 +47,37 @@ export function bindUI(handlers) {
     panel?.classList.remove('collapsed');
   });
 
-  document.getElementById('mob-build')?.addEventListener('click', () => {
-    closeMobilePanels('build-panel');
-    openPanel('build-panel');
-  });
-  document.getElementById('mob-fleet')?.addEventListener('click', () => {
-    closeMobilePanels('fleet-panel');
-    const panel = document.getElementById('fleet-panel');
-    panel?.classList.add('open');
-    panel?.classList.remove('collapsed');
-  });
-  document.getElementById('mob-explore')?.addEventListener('click', () => {
-    closeMobilePanels('explore-panel');
-    const panel = document.getElementById('explore-panel');
-    panel?.classList.add('open');
-    panel?.classList.remove('collapsed');
-  });
+  function toggleMobilePanel(id, needsOpenClass = false) {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    const isOpen = needsOpenClass
+      ? panel.classList.contains('open') && !panel.classList.contains('collapsed')
+      : !panel.classList.contains('collapsed');
+    if (isOpen) {
+      panel.classList.add('collapsed');
+      if (needsOpenClass) panel.classList.remove('open');
+    } else {
+      closeMobilePanels(id);
+      openPanel(id);
+      if (needsOpenClass) panel.classList.add('open');
+    }
+    syncMobileNavActive();
+  }
+
+  function syncMobileNavActive() {
+    const buildOpen = !document.getElementById('build-panel')?.classList.contains('collapsed');
+    const fleetOpen = document.getElementById('fleet-panel')?.classList.contains('open')
+      && !document.getElementById('fleet-panel')?.classList.contains('collapsed');
+    const exploreOpen = document.getElementById('explore-panel')?.classList.contains('open')
+      && !document.getElementById('explore-panel')?.classList.contains('collapsed');
+    document.getElementById('mob-build')?.classList.toggle('active', !!buildOpen);
+    document.getElementById('mob-fleet')?.classList.toggle('active', !!fleetOpen);
+    document.getElementById('mob-explore')?.classList.toggle('active', !!exploreOpen);
+  }
+
+  document.getElementById('mob-build')?.addEventListener('click', () => toggleMobilePanel('build-panel'));
+  document.getElementById('mob-fleet')?.addEventListener('click', () => toggleMobilePanel('fleet-panel', true));
+  document.getElementById('mob-explore')?.addEventListener('click', () => toggleMobilePanel('explore-panel', true));
   document.getElementById('mob-menu')?.addEventListener('click', () => handlers.onMenu?.());
 
   buildBuildList(handlers.onSelectBuild);

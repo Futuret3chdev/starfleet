@@ -1,7 +1,7 @@
-import { getPlanet } from './planets.js?v=18';
-import { BUILDINGS } from './buildings.js?v=18';
-import { TERRAFORM_STAGES, getStage, getTotalProgress, migrateLegacyTerraform } from './terraform-stages.js?v=18';
-import { FLEET_MISSIONS, getMission } from './fleet-missions.js?v=18';
+import { getPlanet } from './planets.js?v=19';
+import { BUILDINGS } from './buildings.js?v=19';
+import { TERRAFORM_STAGES, getStage, getTotalProgress, migrateLegacyTerraform } from './terraform-stages.js?v=19';
+import { FLEET_MISSIONS, getMission } from './fleet-missions.js?v=19';
 
 const SAVE_KEY = 'starfleet-save-v4';
 const SAVE_KEY_LEGACY = ['starfleet-save-v3', 'starfleet-save-v2', 'starfeet-save-v2', 'starfeet-save-v1'];

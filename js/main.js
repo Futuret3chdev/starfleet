@@ -1,17 +1,17 @@
-import { PLANETS, getPlanet } from './planets.js?v=18';
-import { PlanetSelectView } from './planet-select.js?v=18';
-import { ColonyEngine } from './colony-engine.js?v=18';
-import { BUILDINGS } from './buildings.js?v=18';
-import { getStage } from './terraform-stages.js?v=18';
-import { getMission } from './fleet-missions.js?v=18';
+import { PLANETS, getPlanet } from './planets.js?v=19';
+import { PlanetSelectView } from './planet-select.js?v=19';
+import { ColonyEngine } from './colony-engine.js?v=19';
+import { BUILDINGS } from './buildings.js?v=19';
+import { getStage } from './terraform-stages.js?v=19';
+import { getMission } from './fleet-missions.js?v=19';
 import {
   newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame,
   canAfford, isBuildingUnlocked, getBuildingLockReason, launchFleetMission, getIdleShips
-} from './game-state.js?v=18';
+} from './game-state.js?v=19';
 import {
   bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid,
   updateEventBanner, updateFleetPanel, showVictory, showStageAdvance, toast
-} from './ui.js?v=18';
+} from './ui.js?v=19';
 
 let selectView = null, colonyEngine = null, state = null;
 let selectedPlanetId = 'mars', selectedBuild = null;
@@ -89,7 +89,11 @@ function launchColony() {
   ui.show('colony');
   beginColonyAfterLayout();
   toast(`Colony established on ${getPlanet(selectedPlanetId).name}`);
-  setTimeout(() => toast('7 terraform phases ahead — build, explore, launch fleets!'), 3000);
+  if (window.matchMedia('(max-width: 700px)').matches) {
+    setTimeout(() => toast('Tap 🔨 Build in the bar below — then tap cyan rings on the map'), 1500);
+  } else {
+    setTimeout(() => toast('7 terraform phases ahead — build, explore, launch fleets!'), 3000);
+  }
 }
 
 function continueGame() {
