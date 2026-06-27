@@ -102,11 +102,40 @@ export function makeTerrainTexture(planet, size = 512) {
   return tex;
 }
 
+/** Reliable size for WebGL parents — iOS often reports 0 until layout settles. */
+export function getParentSize(parent) {
+  if (!parent) return { w: 0, h: 0 };
+  let w = parent.clientWidth;
+  let h = parent.clientHeight;
+  if (w < 2 || h < 2) {
+    const rect = parent.getBoundingClientRect();
+    w = rect.width;
+    h = rect.height;
+  }
+  if (w < 2 || h < 2) {
+    const vv = window.visualViewport;
+    w = vv?.width || window.innerWidth;
+    h = vv?.height || window.innerHeight;
+  }
+  return { w: Math.floor(w), h: Math.floor(h) };
+}
+
 /** Attach ResizeObserver so WebGL canvas always matches parent size. */
 export function observeCanvasResize(parent, onResize) {
   if (!parent) return () => {};
-  const ro = new ResizeObserver(() => onResize());
+  const tick = () => onResize();
+  const ro = new ResizeObserver(tick);
   ro.observe(parent);
-  requestAnimationFrame(() => onResize());
-  return () => ro.disconnect();
+  const onVV = () => tick();
+  window.visualViewport?.addEventListener('resize', onVV);
+  window.addEventListener('orientationchange', onVV);
+  requestAnimationFrame(tick);
+  setTimeout(tick, 50);
+  setTimeout(tick, 250);
+  setTimeout(tick, 600);
+  return () => {
+    ro.disconnect();
+    window.visualViewport?.removeEventListener('resize', onVV);
+    window.removeEventListener('orientationchange', onVV);
+  };
 }

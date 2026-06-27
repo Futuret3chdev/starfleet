@@ -103,7 +103,14 @@ function continueGame() {
 }
 
 function beginColonyAfterLayout() {
-  requestAnimationFrame(() => requestAnimationFrame(() => startColonyLoop()));
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      startColonyLoop();
+      [100, 400, 900].forEach((ms) => {
+        setTimeout(() => colonyEngine?.resize(), ms);
+      });
+    });
+  });
 }
 
 function launchMission(missionId) {

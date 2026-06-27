@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { getPlanet } from './planets.js';
-import { makeHeightmap, makeTerrainTexture, observeCanvasResize } from './graphics-utils.js';
+import { makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize } from './graphics-utils.js';
 
 const ROVER_URL = '/assets/mars-rover.glb';
 
@@ -705,9 +705,8 @@ export class ColonyEngine {
   resize() {
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    const w = parent.clientWidth;
-    const h = parent.clientHeight;
-    if (w < 1 || h < 1) return;
+    const { w, h } = getParentSize(parent);
+    if (w < 2 || h < 2) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
