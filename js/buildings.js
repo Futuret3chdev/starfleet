@@ -147,8 +147,22 @@ export const BUILDINGS = {
     cost: { credits: 900, minerals: 200 },
     power: -16,
     stormShield: 0.55,
-    requiresTerraform: 30,
-    desc: 'Shields colony from dust storms — 30% terraform'
+    requiresStage: 2,
+    desc: 'Shields colony from dust storms'
+  },
+  orbital_station: {
+    id: 'orbital_station',
+    name: 'Orbital Station',
+    icon: '🛰',
+    category: 'starfleet',
+    cost: { credits: 2200, minerals: 500 },
+    power: -20,
+    fleetCap: 2,
+    terraform: 0.2,
+    creditBoost: 2,
+    requiresStage: 4,
+    requires: 'spaceport',
+    desc: 'Orbital hub — advanced fleet missions & trade'
   }
 };
 
@@ -156,7 +170,7 @@ export const BUILD_ORDER = [
   'habitat', 'solar', 'farm', 'mine', 'garage', 'depot',
   'terraform', 'hydroponics',
   'research', 'comms',
-  'spaceport', 'starfleet_yard', 'starship', 'shield'
+  'spaceport', 'starfleet_yard', 'orbital_station', 'starship', 'shield'
 ];
 
 export const BUILD_CATEGORIES = {

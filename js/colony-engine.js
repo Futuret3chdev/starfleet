@@ -64,6 +64,8 @@ export class ColonyEngine {
     this._buildSky();
     this._buildWorld();
     this._buildVegetation();
+    this._buildWater();
+    this._buildOrbitPaths();
     this._buildLights();
     this._buildDust();
     this._buildPreviewRing();
@@ -402,30 +404,108 @@ export class ColonyEngine {
     return verts.getY(idx);
   }
 
-  _applyTerraformVisuals(tf, complete) {
-    const t = complete ? 1 : tf;
-    if (Math.abs(t - this._lastTf) < 0.005 && !complete) return;
-    this._lastTf = t;
+  _buildWater() {
+    this.waterGroup = new THREE.Group();
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x2a6a9a,
+      roughness: 0.15,
+      metalness: 0.6,
+      transparent: true,
+      opacity: 0.75,
+      emissive: 0x113355,
+      emissiveIntensity: 0.15
+    });
+    const spots = [[-35, -25, 12], [40, 30, 9], [-20, 45, 7], [55, -15, 8], [-50, 10, 10]];
+    spots.forEach(([x, z, r]) => {
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(x, 0.15, z);
+      pool.visible = false;
+      this.waterGroup.add(pool);
+    });
+    this.scene.add(this.waterGroup);
+  }
 
-    this.groundMat.color.copy(this._barrenColor).lerp(this._lushColor, t * 0.92);
-    this.groundMat.roughness = 0.9 - t * 0.35;
-    if (t > 0.1) {
+  _buildOrbitPaths() {
+    this.orbitGroup = new THREE.Group();
+    this.orbitGroup.position.y = 0;
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(55, 55.5, 64),
+      new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.08, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 45;
+    this.orbitGroup.add(ring);
+    this.orbitShips = [];
+    for (let i = 0; i < 4; i++) {
+      const ship = new THREE.Mesh(
+        new THREE.BoxGeometry(1.2, 0.4, 2.5),
+        new THREE.MeshStandardMaterial({ color: 0xaaccee, emissive: 0x4488ff, emissiveIntensity: 0.5, metalness: 0.8 })
+      );
+      ship.visible = false;
+      ship.userData.orbitAngle = (i / 4) * Math.PI * 2;
+      ship.userData.orbitR = 55;
+      ship.userData.orbitY = 42 + i * 2;
+      this.orbitShips.push(ship);
+      this.orbitGroup.add(ship);
+    }
+    this.scene.add(this.orbitGroup);
+  }
+
+  _applyTerraformVisuals(state) {
+    const stage = state.terraformStage ?? 0;
+    const progress = (state.terraformStageProgress ?? 0) / 100;
+    const global = Math.min(1, (stage + progress) / 6);
+    if (Math.abs(global - this._lastTf) < 0.004 && !state.planetComplete) return;
+    this._lastTf = global;
+
+    this.groundMat.color.copy(this._barrenColor).lerp(this._lushColor, global * 0.95);
+    this.groundMat.roughness = 0.92 - global * 0.4;
+    if (global > 0.08) {
       this.groundMat.emissive = new THREE.Color(0x0a2a0a);
-      this.groundMat.emissiveIntensity = t * 0.22;
+      this.groundMat.emissiveIntensity = global * 0.25;
     }
 
-    const fogCol = new THREE.Color(this.planet.fog).lerp(new THREE.Color(0x8ac4e8), t * 0.7);
-    this.scene.fog.color.copy(fogCol);
-    this.scene.fog.density = 0.0035 * (1 - t * 0.65);
-    this.scene.background.copy(this._skyBarren).lerp(this._skyLush, t * 0.75);
-    this._updateSkyColors(t);
+    const waterLevel = Math.max(0, (stage - 1.5 + progress) / 4);
+    this.waterGroup?.children.forEach((pool, i) => {
+      pool.visible = stage >= 2;
+      if (pool.visible) pool.material.opacity = 0.4 + waterLevel * 0.45;
+      pool.position.y = 0.1 + waterLevel * 0.8;
+    });
 
-    this.vegGroup.children.forEach((tree) => {
-      tree.visible = t >= tree.userData.tfThreshold;
+    const fogCol = new THREE.Color(this.planet.fog).lerp(new THREE.Color(0x8ac4e8), global * 0.8);
+    this.scene.fog.color.copy(fogCol);
+    this.scene.fog.density = 0.0035 * (1 - global * 0.7);
+    this.scene.background.copy(this._skyBarren).lerp(this._skyLush, global * 0.85);
+    this._updateSkyColors(global);
+
+    const vegThreshold = Math.max(0.05, 0.35 - stage * 0.04);
+    this.vegGroup?.children.forEach((tree) => {
+      const threshold = tree.userData.tfThreshold * vegThreshold;
+      tree.visible = global >= threshold || stage >= 3;
       if (tree.visible) {
-        const fade = Math.min(1, (t - tree.userData.tfThreshold) * 4);
-        tree.scale.setScalar((0.6 + (tree.userData.tfThreshold % 0.4)) * fade);
+        const fade = Math.min(1, (global - threshold + 0.2) * 3);
+        tree.scale.setScalar((0.5 + (tree.userData.tfThreshold % 0.5)) * Math.max(0.3, fade));
       }
+    });
+
+    this.orbitGroup.visible = stage >= 1 || (state.fleetMissions || []).length > 0;
+  }
+
+  _updateOrbitShips(state, t) {
+    const missions = state.fleetMissions || [];
+    const count = Math.max(missions.length, state.terraformStage >= 1 ? 1 : 0);
+    this.orbitShips.forEach((ship, i) => {
+      ship.visible = i < count || missions.length > 0;
+      if (!ship.visible) return;
+      ship.userData.orbitAngle += 0.15 * (i % 2 === 0 ? 1 : -1) * 0.016;
+      const a = ship.userData.orbitAngle + t * 0.08 * (i + 1);
+      ship.position.set(
+        Math.cos(a) * ship.userData.orbitR,
+        ship.userData.orbitY + Math.sin(t * 0.5 + i) * 2,
+        Math.sin(a) * ship.userData.orbitR
+      );
+      ship.rotation.y = -a + Math.PI / 2;
     });
   }
 
@@ -524,6 +604,18 @@ export class ColonyEngine {
         new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.9 }));
       glow.position.set(0, 2, 3.5);
       grp.add(body, nose, wing, glow);
+    } else if (type === 'orbital_station') {
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.5, 1.5, 12),
+        new THREE.MeshStandardMaterial({ color: 0x556677, metalness: 0.7 }));
+      core.position.y = 0.75;
+      const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 12, 8),
+        new THREE.MeshStandardMaterial({ color: 0x8899bb, emissive: 0x2244aa, emissiveIntensity: 0.3, metalness: 0.8 }));
+      spire.position.y = 7;
+      const dish = new THREE.Mesh(new THREE.TorusGeometry(3, 0.2, 8, 24),
+        new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.4 }));
+      dish.rotation.x = Math.PI / 2;
+      dish.position.y = 10;
+      grp.add(core, spire, dish);
     } else if (type === 'shield') {
       const gen = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.2, 3, 12),
         new THREE.MeshStandardMaterial({ color: 0x5a6a8a, emissive: 0x4466ff, emissiveIntensity: 0.25 }));
@@ -544,11 +636,12 @@ export class ColonyEngine {
   }
 
   syncState(state) {
-    const tf = state.terraform / 100;
-    this._applyTerraformVisuals(tf, state.terraformComplete);
+    this._stateRef = state;
+    this._applyTerraformVisuals(state);
 
     const storm = state.activeEvent?.type === 'dust_storm' ? (state.activeEvent.intensity || 0.5) : 0;
-    this.setStormIntensity(state.terraformComplete ? storm * 0.3 : storm);
+    const calm = (state.terraformStage ?? 0) >= 4;
+    this.setStormIntensity(calm ? storm * 0.2 : storm);
 
     state.buildings.forEach((b) => {
       if (this.buildingMeshes.has(b.id)) return;
@@ -631,6 +724,7 @@ export class ColonyEngine {
       pos.needsUpdate = true;
     }
     if (this.viewMode === 'orbit') this.controls.update();
+    if (this._stateRef) this._updateOrbitShips(this._stateRef, t);
     this.renderer.render(this.scene, this.camera);
   }
 

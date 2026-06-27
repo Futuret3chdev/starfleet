@@ -360,6 +360,50 @@ html, body {
   margin-bottom: 0.25rem;
   text-align: center;
 }
+.terraform-stage-name {
+  text-align: center;
+  font-family: var(--display);
+  font-size: 0.82rem;
+  color: var(--ok);
+  letter-spacing: 0.06em;
+  margin-bottom: 0.35rem;
+}
+.stage-timeline {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+.stage-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid var(--border);
+  opacity: 0.45;
+  transition: transform 0.25s, opacity 0.25s, border-color 0.25s;
+}
+.stage-dot.done { opacity: 1; border-color: var(--ok); background: rgba(20,80,50,0.5); }
+.stage-dot.active {
+  opacity: 1;
+  border-color: var(--accent);
+  background: rgba(0,229,255,0.15);
+  transform: scale(1.15);
+  box-shadow: 0 0 10px rgba(0,229,255,0.35);
+}
+.terraform-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+}
+.terraform-global { color: var(--muted); font-size: 0.68rem; }
 .terraform-track {
   height: 6px;
   background: rgba(0,0,0,0.5);
@@ -525,6 +569,138 @@ html, body {
 }
 .explore-panel.open + #explore-btn { bottom: calc(min(200px, 45vw) + 1.5rem); }
 
+/* Fleet */
+#fleet-btn {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 1rem;
+  z-index: 11;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--display);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+.fleet-panel {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%) translateY(calc(100% + 2rem));
+  bottom: 1rem;
+  width: min(300px, 92vw);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  z-index: 10;
+  transition: transform 0.3s;
+}
+.fleet-panel.open { transform: translateX(-50%) translateY(0); }
+.fleet-panel.collapsed { transform: translateX(-50%) translateY(calc(100% + 2rem)); }
+.fleet-panel.collapsed.open { transform: translateX(-50%) translateY(calc(100% + 2rem)); }
+.fleet-panel .panel-header h3 { color: var(--accent); }
+.fleet-status {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+  line-height: 1.35;
+}
+.fleet-active { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.5rem; }
+.fleet-mission-progress {
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+}
+.fleet-mission-progress span {
+  display: block;
+  font-size: 0.7rem;
+  margin-bottom: 0.25rem;
+}
+.fleet-mission-progress .progress-track {
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.fleet-mission-progress .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #88eeff);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+#fleet-mission-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.fleet-mission-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.45rem 0.55rem;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.fleet-mission-btn:hover:not(.locked):not(.disabled) { border-color: var(--accent); }
+.fleet-mission-btn.locked { opacity: 0.35; filter: grayscale(0.5); cursor: not-allowed; }
+.fleet-mission-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+.fleet-mission-name { flex: 1; font-size: 0.78rem; font-weight: 600; }
+.fleet-mission-time { font-size: 0.65rem; color: var(--muted); }
+.fleet-hint {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+  line-height: 1.3;
+}
+.fab-fleet { bottom: 4.5rem; border-color: var(--accent2); }
+.fleet-panel.open ~ #fleet-btn { bottom: calc(min(280px, 50vh) + 1.5rem); }
+
+/* Stage modal */
+.stage-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s;
+  padding: 1rem;
+}
+.stage-modal.open { opacity: 1; pointer-events: auto; }
+.stage-card {
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 380px;
+  text-align: center;
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.15);
+}
+.stage-kicker {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.stage-card h2 {
+  font-family: var(--display);
+  color: var(--text);
+  margin-bottom: 0.75rem;
+  letter-spacing: 0.04em;
+  font-size: 1.1rem;
+}
+.stage-card p { color: var(--muted); line-height: 1.6; margin-bottom: 1.25rem; font-size: 0.88rem; }
+
 /* Toast */
 #toast {
   position: fixed;
@@ -635,8 +811,13 @@ html, body {
   .build-panel { left: 0.5rem; right: 0.5rem; width: auto; max-height: 42vh; }
   .build-panel.collapsed { transform: translateY(120%); }
   .fab { display: block; }
+  #fleet-btn { display: none; }
   .colony-log { display: none; }
   .terraform-wrap { top: 5.5rem; width: min(260px, 70vw); }
+  .stage-dot { width: 20px; height: 20px; font-size: 0.55rem; }
+  .fleet-panel { width: auto; left: 0.5rem; right: 0.5rem; transform: translateY(calc(100% + 2rem)); }
+  .fleet-panel.open { transform: translateY(0); }
+  .fleet-panel.collapsed.open { transform: translateY(calc(100% + 2rem)); }
   .hud-resources { max-width: 55vw; }
   .res-pill { font-size: 0.68rem; padding: 0.25rem 0.5rem; }
   #explore-btn { bottom: 0.5rem; right: 0.5rem; font-size: 0.68rem; padding: 0.4rem 0.7rem; }

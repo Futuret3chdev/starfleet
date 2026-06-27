@@ -1,13 +1,24 @@
 import { getPlanet } from './planets.js';
 import { BUILDINGS } from './buildings.js';
+import { TERRAFORM_STAGES, getStage, getTotalProgress, migrateLegacyTerraform } from './terraform-stages.js';
+import { FLEET_MISSIONS, getMission } from './fleet-missions.js';
 
-const SAVE_KEY = 'starfleet-save-v3';
-const SAVE_KEY_LEGACY = ['starfleet-save-v2', 'starfeet-save-v2', 'starfeet-save-v1', 'starfleet-save-v1'];
+const SAVE_KEY = 'starfleet-save-v4';
+const SAVE_KEY_LEGACY = ['starfleet-save-v3', 'starfleet-save-v2', 'starfeet-save-v2', 'starfeet-save-v1'];
+
+const STAGE_REWARDS = {
+  1: { credits: 400, msg: '🌫 Atmosphere phase — breathable air emerging' },
+  2: { credits: 600, minerals: 150, msg: '💧 Hydrosphere — lakes forming across surface' },
+  3: { credits: 800, minerals: 100, msg: '🌿 Biosphere — forests taking root' },
+  4: { credits: 1200, popCap: 20, msg: '🏙 Habitable world — cities can thrive' },
+  5: { credits: 5000, minerals: 1000, popCap: 50, msg: '🌍 Eden World — Earth-like planet achieved!' },
+  6: { credits: 8000, minerals: 2000, popCap: 100, msg: '✦ Starfleet Hub — interstellar gateway online' }
+};
 
 export function newColony(planetId, colonyName = 'Outpost Alpha') {
   const planet = getPlanet(planetId);
   return {
-    version: 3,
+    version: 4,
     planetId,
     colonyName,
     tick: 0,
@@ -19,21 +30,23 @@ export function newColony(planetId, colonyName = 'Outpost Alpha') {
     food: 60,
     population: 8,
     popCap: 10,
-    terraform: planet.terraformBase,
+    terraformStage: 0,
+    terraformStageProgress: planet.terraformBase || 0,
+    terraform: 0,
     terraformComplete: false,
+    planetComplete: false,
     storage: 300,
-    buildings: [
-      { id: 'starter-solar', type: 'solar', x: 14, z: 2, level: 1 }
-    ],
+    buildings: [{ id: 'starter-solar', type: 'solar', x: 14, z: 2, level: 1 }],
     trucks: [],
+    fleetMissions: [],
     nodes: generateNodes(planet),
     sectors: generateSectors(planet),
     explored: 1,
-    selectedBuild: null,
     paused: false,
     activeEvent: null,
     eventCooldown: 45,
-    log: []
+    log: [],
+    tradeConvoys: 0
   };
 }
 
@@ -61,8 +74,7 @@ function generateSectors(planet) {
     for (let c = 0; c < 5; c++) {
       sectors.push({
         id: `s-${r}-${c}`,
-        row: r,
-        col: c,
+        row: r, col: c,
         revealed: r === 2 && c === 2,
         scanned: r === 2 && c === 2,
         anomaly: (r * 5 + c + planet.seed) % 7 === 0 ? pickAnomaly() : null,
@@ -78,23 +90,43 @@ function pickAnomaly() {
   return types[Math.floor(Math.random() * types.length)];
 }
 
+export function syncTerraformDisplay(state) {
+  migrateLegacyTerraform(state);
+  state.terraform = getTotalProgress(state.terraformStage, state.terraformStageProgress);
+  state.terraformComplete = state.terraformStage >= 5;
+}
+
 export function canAfford(state, cost) {
   return state.credits >= (cost.credits || 0) && state.minerals >= (cost.minerals || 0);
 }
 
 export function getFleetCap(state) {
-  return state.buildings.reduce((sum, b) => sum + (BUILDINGS[b.type]?.fleetCap || 0), 0);
+  let cap = state.buildings.reduce((sum, b) => sum + (BUILDINGS[b.type]?.fleetCap || 0), 0);
+  if (state.buildings.some((b) => b.type === 'orbital_station')) cap += 2;
+  return cap;
 }
 
 export function getFleetCount(state) {
   return state.buildings.filter((b) => b.type === 'starship').length;
 }
 
+export function getIdleShips(state) {
+  const busy = new Set((state.fleetMissions || []).map((m) => m.shipId));
+  return state.buildings.filter((b) => b.type === 'starship' && !busy.has(b.id));
+}
+
+export function getStageRequirement(def) {
+  if (def.requiresStage != null) return def.requiresStage;
+  if (def.requiresTerraform != null) return Math.floor(def.requiresTerraform / 17);
+  return 0;
+}
+
 export function isBuildingUnlocked(state, type) {
   const def = BUILDINGS[type];
   if (!def) return false;
-  if (state.terraformComplete) return true;
-  if (def.requiresTerraform != null && state.terraform < def.requiresTerraform) return false;
+  syncTerraformDisplay(state);
+  if (state.planetComplete) return true;
+  if (state.terraformStage < getStageRequirement(def)) return false;
   if (def.requires && !state.buildings.some((b) => b.type === def.requires)) return false;
   if (type === 'starship' && getFleetCount(state) >= getFleetCap(state)) return false;
   return true;
@@ -103,24 +135,67 @@ export function isBuildingUnlocked(state, type) {
 export function getBuildingLockReason(state, type) {
   const def = BUILDINGS[type];
   if (!def) return 'Unknown';
-  if (state.terraformComplete) return null;
-  if (def.requiresTerraform != null && state.terraform < def.requiresTerraform) {
-    return `Needs ${def.requiresTerraform}% terraform`;
+  syncTerraformDisplay(state);
+  if (state.planetComplete) return null;
+  const reqStage = getStageRequirement(def);
+  if (state.terraformStage < reqStage) {
+    return `Needs ${getStage(reqStage).name} phase`;
   }
   if (def.requires && !state.buildings.some((b) => b.type === def.requires)) {
     return `Needs ${BUILDINGS[def.requires]?.name || def.requires}`;
   }
   if (type === 'starship' && getFleetCount(state) >= getFleetCap(state)) {
-    return 'Fleet capacity full — build Shipyard/Spaceport';
+    return 'Fleet capacity full';
   }
   return null;
+}
+
+export function isMissionUnlocked(state, mission) {
+  syncTerraformDisplay(state);
+  return state.terraformStage >= (mission.minStage || 0);
+}
+
+export function launchFleetMission(state, missionId, shipId) {
+  const mission = getMission(missionId);
+  if (!mission || !isMissionUnlocked(state, mission)) return false;
+  const ship = state.buildings.find((b) => b.id === shipId && b.type === 'starship');
+  if (!ship) return false;
+  if ((state.fleetMissions || []).some((m) => m.shipId === shipId)) return false;
+  const cost = mission.cost || {};
+  if (!canAfford(state, cost)) return false;
+
+  state.credits -= cost.credits || 0;
+  state.minerals -= cost.minerals || 0;
+  state.fleetMissions = state.fleetMissions || [];
+  state.fleetMissions.push({
+    id: `mission-${Date.now()}`,
+    missionId,
+    shipId,
+    remaining: mission.duration,
+    total: mission.duration,
+    name: mission.name
+  });
+  pushLog(state, `🚀 ${mission.name} launched — ship in orbit`);
+  return true;
+}
+
+function completeFleetMission(state, m) {
+  const mission = getMission(m.missionId);
+  if (!mission) return null;
+  const r = mission.rewards || {};
+  state.credits += r.credits || 0;
+  state.minerals += r.minerals || 0;
+  if (r.popCap) state.popCap += r.popCap;
+  let tfResult = { stageAdvanced: null, planetComplete: false };
+  if (r.terraform) tfResult = addTerraformProgress(state, r.terraform);
+  pushLog(state, `✓ ${mission.name} complete — rewards received`);
+  return { mission, tfResult };
 }
 
 export function placeBuilding(state, type, x, z) {
   const def = BUILDINGS[type];
   if (!def || !canAfford(state, def.cost) || !isBuildingUnlocked(state, type)) return false;
-  const occupied = state.buildings.some((b) => Math.hypot(b.x - x, b.z - z) < 4.5);
-  if (occupied) return false;
+  if (state.buildings.some((b) => Math.hypot(b.x - x, b.z - z) < 4.5)) return false;
 
   state.credits -= def.cost.credits || 0;
   state.minerals -= def.cost.minerals || 0;
@@ -130,7 +205,7 @@ export function placeBuilding(state, type, x, z) {
   if (def.storage) state.storage += def.storage;
   if (def.truckCap) spawnTrucks(state, def.truckCap, x, z);
   if (def.fleetCap) pushLog(state, `Fleet capacity +${def.fleetCap}`);
-  if (def.fleet) pushLog(state, 'Starship commissioned — Starfleet grows');
+  if (def.fleet) pushLog(state, 'Starship ready for orbit missions');
   return true;
 }
 
@@ -138,11 +213,7 @@ function spawnTrucks(state, count, x = 0, z = 0) {
   for (let i = 0; i < count; i++) {
     state.trucks.push({
       id: `truck-${Date.now()}-${i}`,
-      x, z,
-      targetNode: null,
-      cargo: 0,
-      phase: 'idle',
-      t: 0
+      x, z, targetNode: null, cargo: 0, phase: 'idle', t: 0
     });
   }
 }
@@ -160,10 +231,11 @@ export function exploreSector(state, sectorId) {
   if (sector.anomaly) {
     state.credits += 150;
     state.minerals += 40 + sector.resources;
-    pushLog(state, `Anomaly found: ${sector.anomaly}`);
+    addTerraformProgress(state, 1.5);
+    pushLog(state, `Anomaly: ${sector.anomaly}`);
   } else {
     state.minerals += 15 + Math.floor(sector.resources * 0.3);
-    pushLog(state, 'Sector surveyed — minerals logged');
+    pushLog(state, 'Sector surveyed');
   }
   return true;
 }
@@ -171,92 +243,139 @@ export function exploreSector(state, sectorId) {
 function pushLog(state, msg) {
   state.log = state.log || [];
   state.log.unshift({ t: state.tick, msg });
-  if (state.log.length > 8) state.log.pop();
+  if (state.log.length > 10) state.log.pop();
 }
 
-export function checkTerraformComplete(state) {
-  if (state.terraform >= 100 && !state.terraformComplete) {
-    state.terraform = 100;
-    state.terraformComplete = true;
-    state.credits += 5000;
-    state.minerals += 1000;
-    state.popCap += 50;
-    state.oxygen = 100;
-    state.food = 100;
-    pushLog(state, '🌍 TERRAFORM COMPLETE — Planet fully habitable!');
-    return true;
+function applyStageReward(state, stage) {
+  const reward = STAGE_REWARDS[stage];
+  if (!reward) return;
+  state.credits += reward.credits || 0;
+  state.minerals += reward.minerals || 0;
+  state.popCap += reward.popCap || 0;
+  if (stage >= 4) { state.oxygen = Math.min(100, state.oxygen + 20); state.food = Math.min(100, state.food + 20); }
+  pushLog(state, reward.msg);
+}
+
+function applyPlanetComplete(state) {
+  state.oxygen = 100;
+  state.food = 100;
+  pushLog(state, '🏆 Planet transformation complete — Starfleet commands the system');
+}
+
+export function addTerraformProgress(state, amount) {
+  if (state.planetComplete) return { stageAdvanced: null, planetComplete: false };
+  let stageAdvanced = null;
+  state.terraformStageProgress = (state.terraformStageProgress || 0) + amount;
+
+  while (state.terraformStageProgress >= 100 && state.terraformStage < 6) {
+    state.terraformStageProgress -= 100;
+    state.terraformStage++;
+    stageAdvanced = state.terraformStage;
+    applyStageReward(state, state.terraformStage);
   }
-  return false;
+
+  let planetComplete = false;
+  if (state.terraformStage >= 6 && state.terraformStageProgress >= 100) {
+    state.terraformStageProgress = 100;
+    if (!state.planetComplete) {
+      state.planetComplete = true;
+      applyPlanetComplete(state);
+      planetComplete = true;
+      stageAdvanced = 6;
+    }
+  }
+
+  syncTerraformDisplay(state);
+  return { stageAdvanced, planetComplete };
 }
 
 export function simulateTick(state, dt = 1) {
-  if (state.paused) return { terraformJustComplete: false };
+  if (state.paused) return { stageAdvanced: null, planetComplete: false, missionsComplete: [] };
   state.tick += dt;
+  syncTerraformDisplay(state);
 
   updateEvents(state, dt);
+  const missionsComplete = updateFleetMissions(state, dt);
+  let missionStage = null;
+  let missionPlanet = false;
+  missionsComplete.forEach((entry) => {
+    if (entry?.tfResult?.stageAdvanced != null) missionStage = entry.tfResult.stageAdvanced;
+    if (entry?.tfResult?.planetComplete) missionPlanet = true;
+  });
 
-  let powerGen = 0;
-  let powerUse = 0;
-  let harvest = 0;
-  let terraformRate = 0;
-  let foodRate = 0;
-  let creditBoost = 1;
-  let stormShield = 0;
+  let powerGen = 0, powerUse = 0, harvest = 0, terraformRate = 0, foodRate = 0;
+  let creditBoost = 1, stormShield = 0;
+  const hasOrbital = state.buildings.some((b) => b.type === 'orbital_station');
 
   const storm = state.activeEvent?.type === 'dust_storm';
-  const stormPenalty = storm
-    ? (1 - (state.activeEvent.intensity || 0.5) * 0.6 * (1 - stormShield))
-    : 1;
-
   state.buildings.forEach((b) => {
     const def = BUILDINGS[b.type];
     if (!def) return;
+    const stormPenalty = storm ? (1 - (state.activeEvent.intensity || 0.5) * 0.6 * (1 - stormShield)) : 1;
     if (def.power > 0) powerGen += def.power * (b.type === 'solar' ? stormPenalty : 1);
     else powerUse += Math.abs(def.power);
     if (def.harvest) harvest += def.harvest;
     if (def.terraform) terraformRate += def.terraform;
     if (def.foodRate) foodRate += def.foodRate;
-    if (def.creditBoost) creditBoost += def.creditBoost * 0.15;
+    if (def.creditBoost) creditBoost += def.creditBoost * 0.12;
     if (def.stormShield) stormShield = Math.max(stormShield, def.stormShield);
   });
 
-  const passiveTerraform = 0.03 + state.population * 0.0015;
-  const completeBonus = state.terraformComplete ? 0 : 0;
+  if (hasOrbital) { creditBoost += 0.25; terraformRate += 0.05; }
 
+  const passiveTerraform = 0.025 + state.population * 0.0012 + state.terraformStage * 0.008;
   state.energy = Math.min(state.energyCap, state.energy + powerGen * dt);
-  const powerRatio = powerUse > 0
-    ? Math.min(1, (state.energy + powerGen * 0.5) / (powerUse + 1))
-    : 1;
+  const powerRatio = powerUse > 0 ? Math.min(1, (state.energy + powerGen * 0.5) / (powerUse + 1)) : 1;
   state.energy = Math.max(0, state.energy - powerUse * dt);
 
   const habitatCount = state.buildings.filter((b) => b.type === 'habitat').length;
-  const tfGain = (passiveTerraform + completeBonus) * dt + terraformRate * powerRatio * dt;
-  if (!state.terraformComplete) {
-    state.terraform = Math.min(100, state.terraform + tfGain);
-  }
+  const tfGain = (passiveTerraform + terraformRate * powerRatio) * dt;
+  const tfResult = addTerraformProgress(state, tfGain);
 
   if (powerRatio > 0.15 || powerGen >= powerUse) {
     state.minerals += harvest * Math.max(powerRatio, 0.4) * dt * 0.5;
-    state.credits += state.population * 0.8 * creditBoost * dt;
-    state.oxygen = Math.min(100, state.oxygen + (0.1 + state.terraform * 0.004) * dt);
+    state.credits += state.population * 0.85 * creditBoost * dt;
+    const o2boost = 0.08 + state.terraformStage * 0.02;
+    state.oxygen = Math.min(100, state.oxygen + o2boost * dt);
     state.food = Math.min(100, state.food + (habitatCount * 1.2 + foodRate + 0.3) * dt);
   } else {
-    state.oxygen = Math.max(0, state.oxygen - 0.3 * dt);
-    state.food = Math.max(0, state.food - 0.25 * dt);
+    state.oxygen = Math.max(0, state.oxygen - 0.25 * dt);
+    state.food = Math.max(0, state.food - 0.2 * dt);
   }
 
-  state.population = Math.min(state.popCap, state.population + (state.food > 40 ? 0.03 : -0.04) * dt);
-  updateTrucks(state, dt);
+  state.population = Math.min(state.popCap, state.population + (state.food > 40 ? 0.035 : -0.03) * dt);
 
-  const terraformJustComplete = checkTerraformComplete(state);
-  return { terraformJustComplete };
+  if (state.terraformStage >= 3 && Math.random() < dt * 0.02) {
+    state.credits += 50 + state.terraformStage * 20;
+    state.tradeConvoys = (state.tradeConvoys || 0) + 1;
+  }
+
+  updateTrucks(state, dt);
+  const stageAdvanced = tfResult.stageAdvanced ?? missionStage;
+  const planetComplete = tfResult.planetComplete || missionPlanet;
+  return { stageAdvanced, planetComplete, missionsComplete };
+}
+
+function updateFleetMissions(state, dt) {
+  if (!state.fleetMissions?.length) return [];
+  const done = [];
+  state.fleetMissions.forEach((m) => {
+    m.remaining -= dt;
+    if (m.remaining <= 0) done.push(m);
+  });
+  const results = [];
+  done.forEach((m) => {
+    const entry = completeFleetMission(state, m);
+    if (entry) results.push(entry);
+    state.fleetMissions = state.fleetMissions.filter((x) => x.id !== m.id);
+  });
+  return results;
 }
 
 function updateEvents(state, dt) {
   state.eventCooldown = (state.eventCooldown ?? 60) - dt;
-
   if (state.activeEvent) {
-    state.activeEvent.remaining = (state.activeEvent.remaining || 0) - dt;
+    state.activeEvent.remaining -= dt;
     if (state.activeEvent.type === 'dust_storm') {
       state.activeEvent.intensity = Math.min(1, (state.activeEvent.intensity || 0.5) + dt * 0.02);
       if (state.activeEvent.remaining <= 10) {
@@ -264,37 +383,31 @@ function updateEvents(state, dt) {
       }
     }
     if (state.activeEvent.remaining <= 0) {
-      pushLog(state, `${eventLabel(state.activeEvent)} ended`);
+      pushLog(state, 'Dust storm ended');
       state.activeEvent = null;
-      state.eventCooldown = 50 + Math.random() * 40;
+      state.eventCooldown = 40 + Math.random() * 30;
     }
     return;
   }
-
-  if (state.eventCooldown > 0 || state.terraformComplete) return;
-
+  if (state.eventCooldown > 0 || state.terraformStage >= 5) return;
   const planet = getPlanet(state.planetId);
-  const chance = (planet.stormChance || 0.15) * dt * 0.12;
-  if (Math.random() < chance) {
-    state.activeEvent = {
-      type: 'dust_storm',
-      remaining: 25 + Math.random() * 20,
-      intensity: 0.35 + Math.random() * 0.35
-    };
-    pushLog(state, 'DUST STORM — solar output reduced');
+  if (Math.random() < (planet.stormChance || 0.12) * dt * 0.1) {
+    state.activeEvent = { type: 'dust_storm', remaining: 20 + Math.random() * 25, intensity: 0.3 + Math.random() * 0.4 };
+    pushLog(state, 'DUST STORM incoming');
   }
 }
 
-function eventLabel(ev) {
-  if (ev.type === 'dust_storm') return 'Dust storm';
-  return 'Event';
-}
-
 export function getEventMessage(state) {
-  if (state.terraformComplete) return '🌍 Planet habitable — Starfleet era begun';
+  syncTerraformDisplay(state);
+  if (state.planetComplete) return '✦ Starfleet Hub — interstellar missions available';
+  const stage = getStage(state.terraformStage);
+  if ((state.fleetMissions || []).length) {
+    const m = state.fleetMissions[0];
+    return `🛸 ${m.name} — ${Math.ceil(m.remaining)}s remaining`;
+  }
   if (!state.activeEvent) return null;
   if (state.activeEvent.type === 'dust_storm') {
-    return `⚠ Dust Storm — solar −${Math.round((state.activeEvent.intensity || 0.5) * 60)}%`;
+    return `⚠ Dust Storm — solar −${Math.round((state.activeEvent.intensity || 0.5) * 55)}%`;
   }
   return null;
 }
@@ -302,27 +415,18 @@ export function getEventMessage(state) {
 function updateTrucks(state, dt) {
   const garages = state.buildings.filter((b) => b.type === 'garage');
   if (!garages.length) return;
-
   state.trucks.forEach((truck, idx) => {
     const garage = garages[idx % garages.length];
     const speed = 8 * dt;
-
     if (truck.phase === 'idle' || !truck.targetNode) {
-      const node = state.nodes
-        .filter((n) => n.depleted < n.max)
+      const node = state.nodes.filter((n) => n.depleted < n.max)
         .sort((a, b) => Math.hypot(a.x - garage.x, a.z - garage.z) - Math.hypot(b.x - garage.x, b.z - garage.z))[0];
-      if (node) {
-        truck.targetNode = node.id;
-        truck.phase = 'toNode';
-      }
-      truck.x = garage.x;
-      truck.z = garage.z;
+      if (node) { truck.targetNode = node.id; truck.phase = 'toNode'; }
+      truck.x = garage.x; truck.z = garage.z;
       return;
     }
-
     const node = state.nodes.find((n) => n.id === truck.targetNode);
     if (!node) { truck.phase = 'idle'; return; }
-
     if (truck.phase === 'toNode') {
       moveToward(truck, node.x, node.z, speed);
       if (Math.hypot(truck.x - node.x, truck.z - node.z) < 1.5) {
@@ -344,8 +448,7 @@ function updateTrucks(state, dt) {
 }
 
 function moveToward(obj, tx, tz, speed) {
-  const dx = tx - obj.x;
-  const dz = tz - obj.z;
+  const dx = tx - obj.x, dz = tz - obj.z;
   const dist = Math.hypot(dx, dz) || 1;
   obj.x += (dx / dist) * speed;
   obj.z += (dz / dist) * speed;
@@ -364,17 +467,14 @@ export function loadGame() {
         raw = localStorage.getItem(key);
         if (raw) break;
       }
-      if (raw) {
-        const legacy = JSON.parse(raw);
-        legacy.version = 3;
-        legacy.terraformComplete = legacy.terraformComplete ?? (legacy.terraform >= 100);
-        legacy.activeEvent = legacy.activeEvent ?? null;
-        legacy.eventCooldown = legacy.eventCooldown ?? 30;
-        legacy.log = legacy.log ?? [];
-        saveGame(legacy);
-        return legacy;
-      }
     }
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const state = JSON.parse(raw);
+    state.version = 4;
+    state.fleetMissions = state.fleetMissions || [];
+    migrateLegacyTerraform(state);
+    syncTerraformDisplay(state);
+    saveGame(state);
+    return state;
   } catch (_) { return null; }
 }

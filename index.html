@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=7">
+  <link rel="stylesheet" href="/css/style.css?v=8">
 </head>
 <body>
   <div id="app">
@@ -23,13 +23,13 @@
       <div class="title-content">
         <p class="title-tag">MT Ecosystem · Futuret3ch</p>
         <h1 class="title-logo">STARFLEET</h1>
-        <p class="title-tag">Space Colony Strategy · v7</p>
+        <p class="title-tag">Space Colony Strategy · v8</p>
         <nav class="title-nav">
           <button class="btn-primary" id="btn-new-game" type="button">New Expedition</button>
           <button class="btn-secondary" id="btn-continue" type="button" style="display:none">Continue Colony</button>
         </nav>
       </div>
-      <footer class="title-credit">© 2026 Futuret3ch · Select a world · Build · Terraform · Explore</footer>
+      <footer class="title-credit">© 2026 Futuret3ch · Terraform · Fleet · Explore · Command</footer>
     </section>
 
     <!-- PLANET SELECT -->
@@ -84,9 +84,14 @@
       <div id="event-banner" class="event-banner"></div>
 
       <div class="terraform-wrap">
-        <div class="terraform-label">Terraform Progress</div>
+        <div class="terraform-label">Planetary Transformation</div>
+        <div id="terraform-stage-name" class="terraform-stage-name">🏜 Barren</div>
+        <div id="stage-timeline" class="stage-timeline"></div>
         <div class="terraform-track"><div id="terraform-bar"></div></div>
-        <div id="terraform-pct">0%</div>
+        <div class="terraform-meta">
+          <span id="terraform-pct">0%</span>
+          <span id="terraform-global" class="terraform-global">Overall 0%</span>
+        </div>
       </div>
 
       <ul id="colony-log" class="colony-log"></ul>
@@ -103,6 +108,21 @@
       </aside>
 
       <button class="fab" id="fab-build" type="button" title="Open build menu">🔨</button>
+      <button class="fab fab-fleet" id="fab-fleet" type="button" title="Fleet command">🛸</button>
+
+      <aside class="fleet-panel" id="fleet-panel">
+        <div class="panel-header">
+          <h3>Starfleet Missions</h3>
+          <button class="panel-toggle" id="btn-fleet-toggle" type="button" title="Minimize">−</button>
+        </div>
+        <div class="panel-body">
+          <p id="fleet-status" class="fleet-status">Build Spaceport &amp; Starships to launch</p>
+          <div id="fleet-active" class="fleet-active"></div>
+          <div id="fleet-mission-list"></div>
+          <p class="fleet-hint">Ships orbit while missions run · Press F to toggle · Rewards on return</p>
+        </div>
+      </aside>
+      <button id="fleet-btn" type="button">Fleet Command</button>
 
       <button id="explore-btn" type="button">Explore Sectors</button>
       <aside class="explore-panel" id="explore-panel">
@@ -120,9 +140,18 @@
         <p class="mobile-hint">Drag right side to look · Joystick to walk</p>
       </div>
 
+      <div id="stage-modal" class="stage-modal">
+        <div class="stage-card">
+          <p class="stage-kicker">Phase Advanced</p>
+          <h2 id="stage-modal-title">🌫 Atmosphere</h2>
+          <p id="stage-modal-msg"></p>
+          <button class="btn-primary" id="btn-stage-close" type="button">Continue Terraforming</button>
+        </div>
+      </div>
+
       <div id="victory-modal" class="victory-modal">
         <div class="victory-card">
-          <h2>🌍 Terraform Complete!</h2>
+          <h2>🌍 Eden World Achieved!</h2>
           <p id="victory-msg"></p>
           <button class="btn-primary" id="btn-victory-close" type="button">Continue Command</button>
         </div>
@@ -140,6 +169,6 @@
     }
   }
   </script>
-  <script type="module" src="/js/main.js?v=7"></script>
+  <script type="module" src="/js/main.js?v=8"></script>
 </body>
 </html>

@@ -2,23 +2,20 @@ import { PLANETS, getPlanet } from './planets.js';
 import { PlanetSelectView } from './planet-select.js';
 import { ColonyEngine } from './colony-engine.js';
 import { BUILDINGS } from './buildings.js';
+import { getStage } from './terraform-stages.js';
+import { getMission } from './fleet-missions.js';
 import {
   newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame,
-  canAfford, isBuildingUnlocked, getBuildingLockReason
+  canAfford, isBuildingUnlocked, getBuildingLockReason, launchFleetMission, getIdleShips
 } from './game-state.js';
 import {
   bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid,
-  updateEventBanner, showVictory, toast
+  updateEventBanner, updateFleetPanel, showVictory, showStageAdvance, toast
 } from './ui.js';
 
-let selectView = null;
-let colonyEngine = null;
-let state = null;
-let selectedPlanetId = 'mars';
-let selectedBuild = null;
-let rafId = null;
-let lastTick = 0;
-let ui = null;
+let selectView = null, colonyEngine = null, state = null;
+let selectedPlanetId = 'mars', selectedBuild = null;
+let rafId = null, lastTick = 0, ui = null;
 
 function init() {
   ui = bindUI({
@@ -34,24 +31,17 @@ function init() {
       colonyEngine?.setBuildPreview(selectedBuild || null);
       updateBuildPanel(state, selectedBuild);
     },
-    onExplore: () => {
-      const panel = document.getElementById('explore-panel');
-      panel?.classList.toggle('open');
-      panel?.classList.toggle('collapsed', false);
-    }
+    onLaunchMission: launchMission,
+    onExplore: () => document.getElementById('explore-panel')?.classList.toggle('open')
   });
-
   ui.show('title');
-  const saved = loadGame();
-  const contBtn = document.getElementById('btn-continue');
-  if (contBtn) contBtn.style.display = saved ? '' : 'none';
+  document.getElementById('btn-continue').style.display = loadGame() ? '' : 'none';
 }
 
 function startPlanetSelect() {
   stopColony();
   const canvas = document.getElementById('select-canvas');
   if (!canvas) return;
-
   if (selectView) selectView.dispose();
   selectView = new PlanetSelectView(canvas);
   selectedPlanetId = 'mars';
@@ -59,46 +49,27 @@ function startPlanetSelect() {
   updatePlanetCard(getPlanet(selectedPlanetId), 'Outpost Alpha');
 
   const cards = document.getElementById('planet-cards');
-  if (cards) {
-    cards.innerHTML = '';
-    PLANETS.forEach((p) => {
-      const card = document.createElement('button');
-      card.className = 'planet-card' + (p.id === selectedPlanetId ? ' active' : '');
-      card.innerHTML = `<strong>${p.name}</strong><small>${p.difficulty}</small>`;
-      card.addEventListener('click', () => {
-        selectedPlanetId = p.id;
-        document.querySelectorAll('.planet-card').forEach((c) => c.classList.remove('active'));
-        card.classList.add('active');
-        updatePlanetCard(p, document.getElementById('colony-name-input')?.value || 'Outpost Alpha');
-        selectView?.setFeatured(p.id);
-      });
-      cards.appendChild(card);
+  cards.innerHTML = '';
+  PLANETS.forEach((p) => {
+    const card = document.createElement('button');
+    card.className = 'planet-card' + (p.id === selectedPlanetId ? ' active' : '');
+    card.innerHTML = `<strong>${p.name}</strong><small>${p.difficulty}</small>`;
+    card.addEventListener('click', () => {
+      selectedPlanetId = p.id;
+      document.querySelectorAll('.planet-card').forEach((c) => c.classList.remove('active'));
+      card.classList.add('active');
+      updatePlanetCard(p, document.getElementById('colony-name-input')?.value || 'Outpost Alpha');
+      selectView?.setFeatured(p.id);
     });
-  }
+    cards.appendChild(card);
+  });
 
   canvas.onmousemove = (e) => {
     const id = selectView?.pick(e.clientX, e.clientY);
-    if (id) {
-      selectView.setFeatured(id);
-      selectedPlanetId = id;
-      updatePlanetCard(getPlanet(id), document.getElementById('colony-name-input')?.value);
-      document.querySelectorAll('.planet-card').forEach((c) => {
-        c.classList.toggle('active', c.querySelector('strong')?.textContent === getPlanet(id).name);
-      });
-    }
+    if (id) { selectedPlanetId = id; selectView.setFeatured(id); updatePlanetCard(getPlanet(id), document.getElementById('colony-name-input')?.value); }
   };
-
-  canvas.onclick = (e) => {
-    const id = selectView?.pick(e.clientX, e.clientY);
-    if (!id) return;
-    selectedPlanetId = id;
-    selectView.setFeatured(id);
-    updatePlanetCard(getPlanet(id), document.getElementById('colony-name-input')?.value);
-  };
-
   ui.show('select');
   requestAnimationFrame(() => selectView?.resize());
-
   let t0 = performance.now();
   function loop(now) {
     if (!selectView) return;
@@ -110,16 +81,14 @@ function startPlanetSelect() {
 }
 
 function launchColony() {
-  const name = document.getElementById('colony-name-input')?.value?.trim() || 'Outpost Alpha';
   if (selectView) { selectView.dispose(); selectView = null; }
   cancelAnimationFrame(rafId);
-
-  state = newColony(selectedPlanetId, name);
+  state = newColony(selectedPlanetId, document.getElementById('colony-name-input')?.value?.trim() || 'Outpost Alpha');
   selectedBuild = null;
   ui.show('colony');
   beginColonyAfterLayout();
   toast(`Colony established on ${getPlanet(selectedPlanetId).name}`);
-  setTimeout(() => toast('Build Habitat & Terraform Plant — reach 100% to win!'), 3200);
+  setTimeout(() => toast('7 terraform phases ahead — build, explore, launch fleets!'), 3000);
 }
 
 function continueGame() {
@@ -137,114 +106,95 @@ function beginColonyAfterLayout() {
   requestAnimationFrame(() => requestAnimationFrame(() => startColonyLoop()));
 }
 
+function launchMission(missionId) {
+  if (!state) return;
+  const mission = getMission(missionId);
+  const idle = getIdleShips(state);
+  if (!idle.length) { toast('No idle starships — build more at Shipyard'); return; }
+  if (launchFleetMission(state, missionId, idle[0].id)) {
+    toast(`${mission.name} launched — ship entering orbit`);
+    const panel = document.getElementById('fleet-panel');
+    panel?.classList.add('open');
+    panel?.classList.remove('collapsed');
+    updateFleetPanel(state);
+    updateHUD(state);
+    saveGame(state);
+  } else {
+    toast('Cannot launch — check phase unlock & resources');
+  }
+}
+
 function setupColonyInput(canvas) {
   canvas.onpointermove = (e) => {
-    if (selectedBuild && colonyEngine?.viewMode === 'orbit') {
-      colonyEngine.setBuildPreview(selectedBuild, e.clientX, e.clientY);
-    }
-    if (colonyEngine?.viewMode === 'fps' && e.buttons === 1) {
-      colonyEngine.setMobileLook(e.movementX, e.movementY);
-    }
+    if (selectedBuild && colonyEngine?.viewMode === 'orbit') colonyEngine.setBuildPreview(selectedBuild, e.clientX, e.clientY);
+    if (colonyEngine?.viewMode === 'fps' && e.buttons === 1) colonyEngine.setMobileLook(e.movementX, e.movementY);
   };
-
   canvas.onclick = (e) => {
-    if (colonyEngine?.viewMode === 'fps') {
-      colonyEngine.requestPointerLock();
-      return;
-    }
+    if (colonyEngine?.viewMode === 'fps') { colonyEngine.requestPointerLock(); return; }
     if (!selectedBuild || !state) return;
     tryPlaceBuilding(e.clientX, e.clientY);
   };
-
   window.addEventListener('keydown', (e) => {
-    if (!colonyEngine) return;
-    colonyEngine.setKey(e.code, true);
+    colonyEngine?.setKey(e.code, true);
     if (e.code === 'KeyV') toggleFPS();
+    if (e.code === 'KeyF') {
+      const panel = document.getElementById('fleet-panel');
+      panel?.classList.toggle('open');
+      panel?.classList.remove('collapsed');
+    }
   });
   window.addEventListener('keyup', (e) => colonyEngine?.setKey(e.code, false));
+  setupMobileJoy();
+}
 
+function setupMobileJoy() {
   const joy = document.getElementById('mobile-joy');
   const knob = document.getElementById('mobile-joy-knob');
-  if (joy && knob) {
-    let joyId = null;
-    let joyOrigin = { x: 0, y: 0 };
-    joy.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      const t = e.changedTouches[0];
-      joyId = t.identifier;
-      joyOrigin = { x: t.clientX, y: t.clientY };
-    }, { passive: false });
-    joy.addEventListener('touchmove', (e) => {
-      for (const t of e.changedTouches) {
-        if (t.identifier !== joyId) continue;
-        const dx = t.clientX - joyOrigin.x;
-        const dy = t.clientY - joyOrigin.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const clamp = Math.min(40, len);
-        knob.style.transform = `translate(${dx / len * clamp}px, ${dy / len * clamp}px)`;
-        colonyEngine?.setMobileMove(dx / len * (clamp / 40), dy / len * (clamp / 40));
-      }
-    }, { passive: false });
-    const endJoy = (e) => {
-      for (const t of e.changedTouches) {
-        if (t.identifier !== joyId) continue;
-        joyId = null;
-        knob.style.transform = '';
-        colonyEngine?.setMobileMove(0, 0);
-      }
-    };
-    joy.addEventListener('touchend', endJoy);
-    joy.addEventListener('touchcancel', endJoy);
-  }
-
-  let lookId = null;
-  let lookLast = { x: 0, y: 0 };
-  canvas.addEventListener('touchstart', (e) => {
-    if (colonyEngine?.viewMode !== 'fps') return;
+  if (!joy || !knob) return;
+  let joyId = null, origin = { x: 0, y: 0 };
+  joy.addEventListener('touchstart', (e) => {
+    e.preventDefault();
     const t = e.changedTouches[0];
-    if (t.clientX > window.innerWidth * 0.45) {
-      lookId = t.identifier;
-      lookLast = { x: t.clientX, y: t.clientY };
-    }
-  }, { passive: true });
-  canvas.addEventListener('touchmove', (e) => {
-    if (lookId == null) return;
+    joyId = t.identifier;
+    origin = { x: t.clientX, y: t.clientY };
+  }, { passive: false });
+  joy.addEventListener('touchmove', (e) => {
     for (const t of e.changedTouches) {
-      if (t.identifier !== lookId) continue;
-      colonyEngine?.setMobileLook(t.clientX - lookLast.x, t.clientY - lookLast.y);
-      lookLast = { x: t.clientX, y: t.clientY };
+      if (t.identifier !== joyId) continue;
+      const dx = t.clientX - origin.x, dy = t.clientY - origin.y;
+      const len = Math.hypot(dx, dy) || 1, c = Math.min(40, len);
+      knob.style.transform = `translate(${dx / len * c}px, ${dy / len * c}px)`;
+      colonyEngine?.setMobileMove(dx / len * (c / 40), dy / len * (c / 40));
     }
-  }, { passive: true });
-  canvas.addEventListener('touchend', () => { lookId = null; });
+  }, { passive: false });
+  const end = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joyId) continue;
+      joyId = null; knob.style.transform = '';
+      colonyEngine?.setMobileMove(0, 0);
+    }
+  };
+  joy.addEventListener('touchend', end);
+  joy.addEventListener('touchcancel', end);
 }
 
 function tryPlaceBuilding(clientX, clientY) {
   const pos = colonyEngine.pickGround(clientX, clientY);
-  if (!pos) {
-    toast('Click a cyan ring — not the landing pad');
-    return;
-  }
-  if (!isBuildingUnlocked(state, selectedBuild)) {
-    toast(`🔒 ${getBuildingLockReason(state, selectedBuild)}`);
-    return;
-  }
+  if (!pos) { toast('Click cyan ring — not landing pad'); return; }
+  if (!isBuildingUnlocked(state, selectedBuild)) { toast(`🔒 ${getBuildingLockReason(state, selectedBuild)}`); return; }
   const def = BUILDINGS[selectedBuild];
-  if (!canAfford(state, def?.cost)) {
-    toast(`Need ₡${def.cost.credits} · ⛏${def.cost.minerals}`);
-    return;
-  }
+  if (!canAfford(state, def?.cost)) { toast(`Need ₡${def.cost.credits} · ⛏${def.cost.minerals}`); return; }
   if (placeBuilding(state, selectedBuild, pos.x, pos.z)) {
-    toast(`${def.name} constructed`);
+    toast(`${def.name} built`);
     selectedBuild = null;
     colonyEngine.setBuildMode(false);
     colonyEngine.setBuildPreview(null);
     colonyEngine.syncState(state);
     updateBuildPanel(state, null);
     updateHUD(state);
+    updateFleetPanel(state);
     saveGame(state);
-  } else {
-    toast('Too close to another building');
-  }
+  } else toast('Too close to another building');
 }
 
 function toggleFPS() {
@@ -253,11 +203,9 @@ function toggleFPS() {
   selectedBuild = null;
   colonyEngine.setBuildPreview(null);
   updateBuildPanel(state, null);
-  const btn = document.getElementById('btn-fps');
-  const joy = document.getElementById('mobile-controls');
-  if (btn) btn.textContent = mode === 'fps' ? '🛰' : '👁';
-  if (joy) joy.classList.toggle('visible', mode === 'fps');
-  toast(mode === 'fps' ? 'First-person — WASD move · V to exit' : 'Orbit view restored');
+  document.getElementById('btn-fps').textContent = mode === 'fps' ? '🛰' : '👁';
+  document.getElementById('mobile-controls')?.classList.toggle('visible', mode === 'fps');
+  toast(mode === 'fps' ? 'First-person — WASD · V exits' : 'Orbit view');
   if (mode === 'fps') colonyEngine.requestPointerLock();
 }
 
@@ -269,20 +217,17 @@ function startColonyLoop() {
   colonyEngine.resize();
   setupColonyInput(canvas);
 
-  const grid = document.getElementById('explore-grid');
-  grid?.addEventListener('explore-sector', (e) => {
-    if (exploreSector(state, e.detail)) {
-      toast('Sector explored!');
-      updateExploreGrid(state);
-      saveGame(state);
-    } else toast('Not enough credits');
+  document.getElementById('explore-grid')?.addEventListener('explore-sector', (e) => {
+    if (exploreSector(state, e.detail)) { toast('Sector explored!'); updateExploreGrid(state); saveGame(state); }
+    else toast('Not enough credits');
   });
 
   updateHUD(state);
   updateBuildPanel(state, selectedBuild);
   updateExploreGrid(state);
   updateEventBanner(state);
-  if (state.terraformComplete) showVictory(state);
+  updateFleetPanel(state);
+  if (state.terraformStage >= 5) showVictory(state);
   lastTick = performance.now();
 
   let renderT = 0;
@@ -292,22 +237,30 @@ function startColonyLoop() {
     lastTick = now;
     renderT += dt;
     if (dt > 0) {
-      const prevStorm = state.activeEvent?.type;
-      const { terraformJustComplete } = simulateTick(state, dt);
-      if (state.activeEvent?.type === 'dust_storm' && prevStorm !== 'dust_storm') {
-        toast('Dust storm — solar weakened');
+      const result = simulateTick(state, dt);
+      if (result.missionsComplete?.length) {
+        result.missionsComplete.forEach((entry) => {
+          toast(`✓ ${entry.mission.name} returned with rewards`);
+        });
+        saveGame(state);
       }
-      if (terraformJustComplete) {
+      if (result.stageAdvanced != null) {
+        showStageAdvance(state, result.stageAdvanced);
+        toast(`${getStage(result.stageAdvanced).icon} ${getStage(result.stageAdvanced).name} phase!`);
+        if (result.stageAdvanced >= 5 && result.stageAdvanced < 6) showVictory(state);
+        saveGame(state);
+      }
+      if (result.planetComplete) {
         showVictory(state);
-        toast('🌍 TERRAFORM COMPLETE — Planet is habitable!');
-        colonyEngine.syncState(state);
+        toast('✦ Starfleet Hub — interstellar era!');
         saveGame(state);
       }
       colonyEngine.syncState(state);
       updateHUD(state);
       updateBuildPanel(state, selectedBuild);
       updateEventBanner(state);
-      if (state.tick % 30 < dt) saveGame(state);
+      updateFleetPanel(state);
+      if (state.tick % 25 < dt) saveGame(state);
     }
     colonyEngine.render(renderT, dt);
     rafId = requestAnimationFrame(loop);
