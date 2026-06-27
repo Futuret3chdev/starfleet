@@ -1,6 +1,6 @@
 {
-  "name": "Starfeet — Space Colony Strategy",
-  "short_name": "Starfeet",
+  "name": "Starfleet — Space Colony Strategy",
+  "short_name": "Starfleet",
   "description": "Build colonies on Mars and beyond. Harvest, terraform, explore.",
   "start_url": "/",
   "display": "standalone",

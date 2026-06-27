@@ -1,8 +1,8 @@
 import { getPlanet } from './planets.js';
 import { BUILDINGS } from './buildings.js';
 
-const SAVE_KEY = 'starfeet-save-v2';
-const SAVE_KEY_LEGACY = 'starfeet-save-v1';
+const SAVE_KEY = 'starfleet-save-v2';
+const SAVE_KEY_LEGACY = ['starfeet-save-v2', 'starfeet-save-v1', 'starfleet-save-v1'];
 
 export function newColony(planetId, colonyName = 'Outpost Alpha') {
   const planet = getPlanet(planetId);
@@ -286,13 +286,16 @@ export function loadGame() {
   try {
     let raw = localStorage.getItem(SAVE_KEY);
     if (!raw) {
-      raw = localStorage.getItem(SAVE_KEY_LEGACY);
+      for (const key of SAVE_KEY_LEGACY) {
+        raw = localStorage.getItem(key);
+        if (raw) break;
+      }
       if (raw) {
         const legacy = JSON.parse(raw);
         legacy.version = 2;
-        legacy.activeEvent = null;
-        legacy.eventCooldown = 30;
-        legacy.log = [];
+        legacy.activeEvent = legacy.activeEvent ?? null;
+        legacy.eventCooldown = legacy.eventCooldown ?? 30;
+        legacy.log = legacy.log ?? [];
         saveGame(legacy);
         return legacy;
       }

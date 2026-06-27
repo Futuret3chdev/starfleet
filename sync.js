@@ -6,7 +6,7 @@ const { execSync } = require('child_process');
 
 const ROOT = __dirname;
 const OWNER = process.env.GITHUB_OWNER || 'Futuret3chdev';
-const REPO = process.env.GITHUB_REPO || 'starfeet';
+const REPO = process.env.GITHUB_REPO || 'starfleet';
 const BRANCH = process.env.GITHUB_BRANCH || 'main';
 const MESSAGE = process.argv[2] || `Update ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`;
 const SKIP_GITHUB = process.env.SYNC_GITHUB === '0';
@@ -41,7 +41,7 @@ function api(token, method, apiPath, body) {
       headers: {
         Authorization: `token ${token}`,
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'starfeet-sync',
+        'User-Agent': 'starfleet-sync',
         ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {})
       }
     }, res => {
@@ -119,7 +119,7 @@ function syncVercelCli() {
 }
 
 (async () => {
-  console.log(`🚀 Starfeet Sync — "${MESSAGE}"`);
+  console.log(`🚀 Starfleet Sync — "${MESSAGE}"`);
   if (!SKIP_GITHUB) {
     const token = getGhToken();
     await syncGitHubAtomic(token);

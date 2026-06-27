@@ -17,4 +17,4 @@ if [ ! -x "$NODE" ]; then
   rm -f "/tmp/$TARBALL"
 fi
 export PATH="$NODE_DIR/bin:${PATH:-/usr/bin:/bin}"
-exec "$NODE" "$ROOT/sync.js" "${1:-Update Starfeet}"
+exec "$NODE" "$ROOT/sync.js" "${1:-Update Starfleet}"
