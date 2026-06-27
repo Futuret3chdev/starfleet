@@ -3,8 +3,8 @@ import { MOUSE } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import { getPlanet } from './planets.js';
-import { makeHeightmap, makeTerrainTexture, observeCanvasResize } from './graphics-utils.js';
+import { getPlanet } from './planets.js?v=16';
+import { makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize, initWebGLRenderer } from './graphics-utils.js?v=16';
 
 const ROVER_URL = '/assets/mars-rover.glb';
 
@@ -25,11 +25,12 @@ export class ColonyEngine {
     this._fpsPitch = 0;
     this._lastTf = -1;
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const gpu = initWebGLRenderer(canvas);
+    if (!gpu.renderer) throw new Error('WebGL unavailable');
+    this._mobileGPU = gpu.mobile;
+    this.renderer = gpu.renderer;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
 
@@ -57,7 +58,11 @@ export class ColonyEngine {
     this.fpsPivot.add(this.camera);
     this.camera.position.set(0, 0, 0);
 
-    this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
+    try {
+      this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
+    } catch (_) {
+      this.pointerLock = null;
+    }
 
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
@@ -334,7 +339,8 @@ export class ColonyEngine {
     this.sun = new THREE.DirectionalLight(0xffeedd, 1.5);
     this.sun.position.set(55, 75, 35);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    const shadowMap = this._mobileGPU ? 1024 : 2048;
+    this.sun.shadow.mapSize.set(shadowMap, shadowMap);
     this.sun.shadow.camera.near = 10;
     this.sun.shadow.camera.far = 200;
     this.sun.shadow.camera.left = -70;
@@ -706,8 +712,7 @@ export class ColonyEngine {
   resize() {
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    const w = parent.clientWidth;
-    const h = parent.clientHeight;
+    const { w, h } = getParentSize(parent);
     if (w < 1 || h < 1) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;

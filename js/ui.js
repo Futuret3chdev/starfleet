@@ -1,12 +1,12 @@
-import { BUILDINGS, BUILD_ORDER, BUILD_CATEGORIES } from './buildings.js';
-import { getPlanet } from './planets.js';
-import { TERRAFORM_STAGES, getStage, getTotalProgress } from './terraform-stages.js';
-import { FLEET_MISSIONS } from './fleet-missions.js';
+import { BUILDINGS, BUILD_ORDER, BUILD_CATEGORIES } from './buildings.js?v=16';
+import { getPlanet } from './planets.js?v=16';
+import { TERRAFORM_STAGES, getStage, getTotalProgress } from './terraform-stages.js?v=16';
+import { FLEET_MISSIONS } from './fleet-missions.js?v=16';
 import {
   canAfford, getEventMessage, isBuildingUnlocked, getBuildingLockReason,
   getFleetCount, getFleetCap, getIdleShips, isMissionUnlocked, syncTerraformDisplay,
   getPowerStats
-} from './game-state.js';
+} from './game-state.js?v=16';
 
 export function bindUI(handlers) {
   const screens = {

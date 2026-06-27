@@ -1,17 +1,17 @@
-import { PLANETS, getPlanet } from './planets.js';
-import { PlanetSelectView } from './planet-select.js';
-import { ColonyEngine } from './colony-engine.js';
-import { BUILDINGS } from './buildings.js';
-import { getStage } from './terraform-stages.js';
-import { getMission } from './fleet-missions.js';
+import { PLANETS, getPlanet } from './planets.js?v=16';
+import { PlanetSelectView } from './planet-select.js?v=16';
+import { ColonyEngine } from './colony-engine.js?v=16';
+import { BUILDINGS } from './buildings.js?v=16';
+import { getStage } from './terraform-stages.js?v=16';
+import { getMission } from './fleet-missions.js?v=16';
 import {
   newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame,
   canAfford, isBuildingUnlocked, getBuildingLockReason, launchFleetMission, getIdleShips
-} from './game-state.js';
+} from './game-state.js?v=16';
 import {
   bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid,
   updateEventBanner, updateFleetPanel, showVictory, showStageAdvance, toast
-} from './ui.js';
+} from './ui.js?v=16';
 
 let selectView = null, colonyEngine = null, state = null;
 let selectedPlanetId = 'mars', selectedBuild = null;
@@ -70,6 +70,7 @@ function startPlanetSelect() {
   };
   ui.show('select');
   requestAnimationFrame(() => selectView?.resize());
+  [100, 400, 900].forEach((ms) => setTimeout(() => selectView?.resize(), ms));
   let t0 = performance.now();
   function loop(now) {
     if (!selectView) return;

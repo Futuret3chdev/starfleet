@@ -16,6 +16,8 @@
 
 html, body {
   height: 100%;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
