@@ -1,18 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-MSG="${1:-Update Starfeet}"
-cd "$ROOT"
-if [ ! -d .git ]; then
-  git init
-  git branch -M main
+NODE_DIR="/tmp/node-v22.16.0-darwin-x64"
+NODE="$NODE_DIR/bin/node"
+ARCH="$(uname -m)"
+TARBALL="node-v22.16.0-darwin-x64.tar.gz"
+if [ "$ARCH" = "arm64" ]; then
+  NODE_DIR="/tmp/node-v22.16.0-darwin-arm64"
+  NODE="$NODE_DIR/bin/node"
+  TARBALL="node-v22.16.0-darwin-arm64.tar.gz"
 fi
-git add -A
-git diff --cached --quiet && echo "Nothing to commit" && exit 0
-git commit -m "$MSG"
-if git remote get-url origin &>/dev/null; then
-  git push origin main
-  echo "✅ Pushed to origin/main"
-else
-  echo "💡 Run: git remote add origin <your-repo-url> && ./sync.sh"
+if [ ! -x "$NODE" ]; then
+  echo "Node.js not found — downloading portable v22.16.0..."
+  curl -fsSL "https://nodejs.org/dist/v22.16.0/$TARBALL" -o "/tmp/$TARBALL"
+  tar -xzf "/tmp/$TARBALL" -C /tmp
+  rm -f "/tmp/$TARBALL"
 fi
+export PATH="$NODE_DIR/bin:${PATH:-/usr/bin:/bin}"
+exec "$NODE" "$ROOT/sync.js" "${1:-Update Starfeet}"
