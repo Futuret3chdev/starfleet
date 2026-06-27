@@ -25,13 +25,29 @@ export class ColonyEngine {
     this._fpsPitch = 0;
     this._lastTf = -1;
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2;
+    const dpr = Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.5 : 2);
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: dpr < 2,
+        alpha: false,
+        failIfMajorPerformanceCaveat: false,
+        powerPreference: 'default'
+      });
+    } catch (err) {
+      console.error('WebGL init failed', err);
+      this.renderer = null;
+      const fb = document.getElementById('colony-fallback');
+      if (fb) { fb.hidden = false; fb.textContent = '3D view unavailable on this device — use Build menu below to play'; }
+    }
+    if (this.renderer) {
+      this.renderer.setPixelRatio(dpr);
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 1.2;
+    }
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(this.planet.sky);
@@ -703,6 +719,7 @@ export class ColonyEngine {
   }
 
   resize() {
+    if (!this.renderer) return;
     const parent = this.canvas.parentElement;
     if (!parent) return;
     const { w, h } = getParentSize(parent);
@@ -713,6 +730,7 @@ export class ColonyEngine {
   }
 
   render(t = 0, dt = 0.016) {
+    if (!this.renderer) return;
     this._updateFPS(dt);
     if (this.dust && this.stormIntensity > 0.05) {
       const pos = this.dust.geometry.attributes.position;
@@ -730,6 +748,6 @@ export class ColonyEngine {
   dispose() {
     this._stopResize?.();
     this.pointerLock?.unlock();
-    this.renderer.dispose();
+    this.renderer?.dispose();
   }
 }

@@ -45,7 +45,6 @@ html, body {
   min-height: -webkit-fill-available;
 }
 .screen.active { display: flex; flex-direction: column; }
-#colony-screen.active { display: block; }
 
 /* ── Title ── */
 #title-screen {
@@ -246,6 +245,12 @@ html, body {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  isolation: isolate;
+}
+#colony-screen.active {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .colony-canvas-wrap {
@@ -253,8 +258,8 @@ html, body {
   inset: 0;
   width: 100%;
   height: 100%;
-  min-height: 100%;
   z-index: 0;
+  transform: translateZ(0);
   background: radial-gradient(ellipse at 50% 80%, rgba(40, 20, 10, 0.25), #060a12);
 }
 #colony-canvas {
@@ -262,11 +267,34 @@ html, body {
   inset: 0;
   width: 100%;
   height: 100%;
-  min-width: 100%;
-  min-height: 100%;
   display: block;
   touch-action: none;
+  z-index: 0;
 }
+.colony-fallback {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1rem;
+  max-width: 80vw;
+  pointer-events: none;
+}
+.colony-fallback:not([hidden]) { display: block; }
+
+.colony-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  transform: translateZ(1px);
+  pointer-events: none;
+  isolation: isolate;
+}
+.colony-ui > * { pointer-events: auto; }
 
 .hud-top {
   position: absolute;
@@ -275,8 +303,9 @@ html, body {
   align-items: flex-start;
   justify-content: space-between;
   padding: 0.75rem 1rem;
+  padding-top: max(0.75rem, env(safe-area-inset-top));
   pointer-events: none;
-  z-index: 10;
+  z-index: 20;
 }
 .hud-top > * { pointer-events: auto; }
 
@@ -374,7 +403,7 @@ html, body {
   left: 50%;
   transform: translateX(-50%);
   width: min(320px, 60vw);
-  z-index: 10;
+  z-index: 20;
   pointer-events: none;
 }
 .terraform-label {
@@ -492,7 +521,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem;
-  z-index: 10;
+  z-index: 25;
   transition: transform 0.3s, opacity 0.3s;
 }
 .build-panel.collapsed {
@@ -829,31 +858,103 @@ html, body {
 }
 .victory-card p { color: var(--muted); line-height: 1.6; margin-bottom: 1.25rem; font-size: 0.9rem; }
 
+.boot-error {
+  position: fixed;
+  inset: auto 1rem 1rem;
+  z-index: 500;
+  background: rgba(80, 20, 20, 0.95);
+  border: 1px solid var(--warn);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.boot-error:not([hidden]) { display: block; }
+
+.mobile-nav {
+  display: none;
+}
+
 @media (max-width: 700px) {
   #select-screen { flex-direction: column; min-height: 100dvh; }
-  .select-canvas-wrap { min-height: 45dvh; flex: 1 1 auto; }
-  #colony-screen,
-  #colony-screen .colony-canvas-wrap {
-    position: fixed;
-    inset: 0;
+  .select-canvas-wrap { min-height: 40dvh; flex: 1 1 auto; }
+  .select-panel {
     width: 100%;
-    height: 100%;
-    height: 100dvh;
-    min-height: 100dvh;
-    min-height: -webkit-fill-available;
+    max-height: 50vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  .select-panel { width: 100%; max-height: 42vh; border-left: none; border-top: 1px solid var(--border); flex-shrink: 0; }
-  .build-panel { left: 0.5rem; right: 0.5rem; width: auto; max-height: 42vh; }
-  .build-panel.collapsed { transform: translateY(120%); }
-  .fab { display: block; }
-  #fleet-btn { display: none; }
   .colony-log { display: none; }
-  .terraform-wrap { top: 5.5rem; width: min(260px, 70vw); }
+  .terraform-wrap {
+    top: calc(4.5rem + env(safe-area-inset-top));
+    width: min(280px, 88vw);
+    z-index: 20;
+  }
   .stage-dot { width: 20px; height: 20px; font-size: 0.55rem; }
-  .fleet-panel { width: auto; left: 0.5rem; right: 0.5rem; transform: translateY(calc(100% + 2rem)); }
-  .fleet-panel.open { transform: translateY(0); }
-  .fleet-panel.collapsed.open { transform: translateY(calc(100% + 2rem)); }
-  .hud-resources { max-width: 55vw; }
-  .res-pill { font-size: 0.68rem; padding: 0.25rem 0.5rem; }
-  #explore-btn { bottom: 0.5rem; right: 0.5rem; font-size: 0.68rem; padding: 0.4rem 0.7rem; }
+  .hud-resources { max-width: 62vw; gap: 0.3rem; }
+  .res-pill { font-size: 0.62rem; padding: 0.2rem 0.45rem; }
+  .hud-brand { padding: 0.35rem 0.65rem; font-size: 0.85rem; }
+  #hud-colony { font-size: 0.78rem; }
+  .icon-btn { width: 32px; height: 32px; font-size: 0.9rem; }
+
+  .fab, #explore-btn, #fleet-btn { display: none !important; }
+
+  .mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    gap: 0.35rem;
+    padding: 0.45rem 0.5rem;
+    padding-bottom: max(0.45rem, env(safe-area-inset-bottom));
+    background: rgba(6, 10, 18, 0.94);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .mobile-nav button {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--display);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    padding: 0.55rem 0.25rem;
+    cursor: pointer;
+  }
+  .mobile-nav button:active { border-color: var(--accent); background: rgba(0,229,255,0.12); }
+
+  .build-panel,
+  .fleet-panel,
+  .explore-panel {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-height: 42vh;
+    bottom: calc(3.6rem + env(safe-area-inset-bottom));
+    z-index: 35;
+  }
+  .build-panel { transform: translateY(calc(100% + 5rem)); }
+  .build-panel:not(.collapsed) { transform: translateY(0); }
+  .build-panel.collapsed { transform: translateY(calc(100% + 5rem)); opacity: 0; pointer-events: none; }
+  .fleet-panel {
+    left: 0.5rem;
+    right: 0.5rem;
+    transform: translateX(0) translateY(calc(100% + 5rem));
+  }
+  .fleet-panel.open { transform: translateX(0) translateY(0); }
+  .fleet-panel.collapsed.open { transform: translateX(0) translateY(calc(100% + 5rem)); }
+  .explore-panel { transform: translateY(calc(100% + 5rem)); }
+  .explore-panel.open { transform: translateY(0); }
+  .explore-panel.collapsed.open { transform: translateY(calc(100% + 5rem)); }
+
+  #toast { bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
 }
