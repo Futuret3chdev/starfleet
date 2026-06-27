@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { MOUSE } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { getPlanet } from './planets.js';
 import { makeHeightmap, makeTerrainTexture, observeCanvasResize } from './graphics-utils.js';
 
@@ -16,6 +17,13 @@ export class ColonyEngine {
     this.nodeMeshes = [];
     this._roverTemplate = null;
     this.stormIntensity = 0;
+    this.viewMode = 'orbit';
+    this.keys = {};
+    this.mobileMove = { x: 0, y: 0 };
+    this.mobileLook = { x: 0, y: 0 };
+    this._fpsYaw = 0;
+    this._fpsPitch = 0;
+    this._lastTf = -1;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -28,6 +36,10 @@ export class ColonyEngine {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(this.planet.sky);
     this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.0035);
+    this._barrenColor = new THREE.Color(this.planet.color);
+    this._lushColor = new THREE.Color(0x3d8a3d);
+    this._skyBarren = new THREE.Color(this.planet.sky);
+    this._skyLush = new THREE.Color(0x6ab8e8);
 
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 800);
     this.camera.position.set(28, 34, 48);
@@ -39,27 +51,129 @@ export class ColonyEngine {
     this.controls.maxDistance = 130;
     this.controls.target.set(0, 1, 0);
 
+    this.fpsPivot = new THREE.Object3D();
+    this.fpsPivot.position.set(0, 2.4, 18);
+    this.scene.add(this.fpsPivot);
+    this.fpsPivot.add(this.camera);
+    this.camera.position.set(0, 0, 0);
+
+    this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
+
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this._buildSky();
     this._buildWorld();
+    this._buildVegetation();
     this._buildLights();
     this._buildDust();
     this._buildPreviewRing();
     this._loadRover();
 
+    this._orbitCamPos = new THREE.Vector3(28, 34, 48);
+    this._orbitTarget = new THREE.Vector3(0, 1, 0);
+    this.camera.removeFromParent();
+    this.scene.add(this.camera);
+    this.camera.position.copy(this._orbitCamPos);
+
     this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
     this.setBuildMode(false);
+    this.setViewMode('orbit');
   }
 
   setBuildMode(active) {
     this._buildMode = active;
-    if (active) {
-      this.controls.mouseButtons = { LEFT: null, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
-      this.controls.enablePan = true;
-    } else {
-      this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+    if (this.viewMode === 'orbit') {
+      if (active) {
+        this.controls.mouseButtons = { LEFT: null, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
+      } else {
+        this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+      }
     }
+  }
+
+  setViewMode(mode) {
+    this.viewMode = mode;
+    if (mode === 'fps') {
+      this.controls.enabled = false;
+      this.setBuildMode(false);
+      const pos = this.camera.position.clone();
+      this.camera.removeFromParent();
+      this.fpsPivot.add(this.camera);
+      this.camera.position.set(0, 0, 0);
+      this.fpsPivot.position.set(pos.x, 2.4, pos.z);
+      this._fpsYaw = Math.atan2(-pos.x, -pos.z);
+      this._fpsPitch = 0;
+      this.fpsPivot.rotation.set(0, this._fpsYaw, 0);
+      this.canvas.classList.add('fps-mode');
+    } else {
+      this.pointerLock.unlock();
+      const fp = this.fpsPivot.position.clone();
+      this.camera.removeFromParent();
+      this.scene.add(this.camera);
+      this.camera.position.set(fp.x, 34, fp.z);
+      this._orbitCamPos.copy(this.camera.position);
+      this.controls.target.copy(this._orbitTarget);
+      this.controls.enabled = true;
+      this.controls.update();
+      this.canvas.classList.remove('fps-mode');
+      this.setBuildMode(this._buildMode);
+    }
+  }
+
+  toggleViewMode() {
+    this.setViewMode(this.viewMode === 'orbit' ? 'fps' : 'orbit');
+    return this.viewMode;
+  }
+
+  requestPointerLock() {
+    if (this.viewMode === 'fps' && !('ontouchstart' in window)) {
+      this.pointerLock.lock();
+    }
+  }
+
+  setKey(code, down) {
+    this.keys[code] = down;
+  }
+
+  setMobileMove(x, y) {
+    this.mobileMove.x = x;
+    this.mobileMove.y = y;
+  }
+
+  setMobileLook(dx, dy) {
+    if (this.viewMode !== 'fps') return;
+    this._fpsYaw -= dx * 0.004;
+    this._fpsPitch = Math.max(-1.2, Math.min(1.2, this._fpsPitch - dy * 0.004));
+    this.fpsPivot.rotation.y = this._fpsYaw;
+    this.camera.rotation.x = this._fpsPitch;
+  }
+
+  _updateFPS(dt) {
+    if (this.viewMode !== 'fps') return;
+    const speed = 16 * dt;
+    const dir = new THREE.Vector3();
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.fpsPivot.quaternion);
+    fwd.y = 0;
+    fwd.normalize();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+
+    let mx = 0;
+    let mz = 0;
+    if (this.keys.KeyW || this.keys.ArrowUp) mz -= 1;
+    if (this.keys.KeyS || this.keys.ArrowDown) mz += 1;
+    if (this.keys.KeyA || this.keys.ArrowLeft) mx -= 1;
+    if (this.keys.KeyD || this.keys.ArrowRight) mx += 1;
+    mx += this.mobileMove.x;
+    mz += this.mobileMove.y;
+
+    dir.addScaledVector(fwd, -mz * speed);
+    dir.addScaledVector(right, mx * speed);
+    this.fpsPivot.position.add(dir);
+    const y = this._terrainHeight(this.fpsPivot.position.x, this.fpsPivot.position.z);
+    this.fpsPivot.position.y = y + 2.4;
+    const bound = 95;
+    this.fpsPivot.position.x = THREE.MathUtils.clamp(this.fpsPivot.position.x, -bound, bound);
+    this.fpsPivot.position.z = THREE.MathUtils.clamp(this.fpsPivot.position.z, -bound, bound);
   }
 
   _buildPreviewRing() {
@@ -73,7 +187,7 @@ export class ColonyEngine {
   }
 
   setBuildPreview(buildType, clientX, clientY) {
-    if (!this.previewRing) return;
+    if (!this.previewRing || this.viewMode === 'fps') return;
     if (!buildType || clientX == null) {
       this.previewRing.visible = false;
       return;
@@ -86,27 +200,31 @@ export class ColonyEngine {
     const y = this._terrainHeight(pos.x, pos.z) + 0.2;
     this.previewRing.position.set(pos.x, y, pos.z);
     this.previewRing.visible = true;
-    this.previewRing.material.color.set(0x00e5ff);
   }
 
   _buildSky() {
     const skyGeo = new THREE.SphereGeometry(380, 32, 16);
-    const top = new THREE.Color(this.planet.skyTop || this.planet.sky);
+    const skyMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true });
+    this.skyVerts = skyGeo.attributes.position;
+    this.skyColors = new Float32Array(this.skyVerts.count * 3);
+    skyGeo.setAttribute('color', new THREE.BufferAttribute(this.skyColors, 3));
+    this.skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    this.scene.add(this.skyMesh);
+    this._updateSkyColors(0);
+  }
+
+  _updateSkyColors(tf) {
     const bottom = new THREE.Color(this.planet.fog);
-    const skyMat = new THREE.MeshBasicMaterial({
-      side: THREE.BackSide,
-      vertexColors: true
-    });
-    const colors = [];
-    const verts = skyGeo.attributes.position;
-    for (let i = 0; i < verts.count; i++) {
-      const y = verts.getY(i);
+    const top = new THREE.Color().copy(this._skyBarren).lerp(this._skyLush, tf);
+    for (let i = 0; i < this.skyVerts.count; i++) {
+      const y = this.skyVerts.getY(i);
       const t = Math.max(0, (y + 80) / 160);
       const c = bottom.clone().lerp(top, t);
-      colors.push(c.r, c.g, c.b);
+      this.skyColors[i * 3] = c.r;
+      this.skyColors[i * 3 + 1] = c.g;
+      this.skyColors[i * 3 + 2] = c.b;
     }
-    skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    this.scene.add(new THREE.Mesh(skyGeo, skyMat));
+    this.skyMesh.geometry.attributes.color.needsUpdate = true;
   }
 
   _buildWorld() {
@@ -128,6 +246,7 @@ export class ColonyEngine {
     const segments = 128;
     const geo = new THREE.PlaneGeometry(200, 200, segments, segments);
     const verts = geo.attributes.position;
+    this._groundVerts = verts;
     for (let i = 0; i < verts.count; i++) {
       const ix = i % (segments + 1);
       const iy = Math.floor(i / (segments + 1));
@@ -140,19 +259,17 @@ export class ColonyEngine {
     geo.computeBoundingSphere();
 
     const groundTex = makeTerrainTexture(this.planet);
-    const groundMat = new THREE.MeshStandardMaterial({
+    this.groundMat = new THREE.MeshStandardMaterial({
       map: groundTex,
       roughness: 0.9,
       metalness: 0.04,
       color: new THREE.Color(this.planet.color)
     });
-    this.groundMat = groundMat;
-    this.ground = new THREE.Mesh(geo, groundMat);
+    this.ground = new THREE.Mesh(geo, this.groundMat);
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
-    // Flat invisible plane — reliable click-to-build raycasting
     this.pickPlane = new THREE.Mesh(
       new THREE.PlaneGeometry(220, 220),
       new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide })
@@ -184,6 +301,29 @@ export class ColonyEngine {
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.18;
     this.scene.add(ring);
+  }
+
+  _buildVegetation() {
+    this.vegGroup = new THREE.Group();
+    const treeMat = new THREE.MeshStandardMaterial({ color: 0x2d6b2d, roughness: 0.8 });
+    const bushMat = new THREE.MeshStandardMaterial({ color: 0x3a8a3a, roughness: 0.85 });
+    for (let i = 0; i < 120; i++) {
+      const x = (Math.random() - 0.5) * 170;
+      const z = (Math.random() - 0.5) * 170;
+      if (Math.hypot(x, z) < 14) continue;
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.6, 6), treeMat);
+      trunk.position.y = 0.3;
+      const crown = new THREE.Mesh(new THREE.ConeGeometry(0.5 + Math.random() * 0.4, 1.2 + Math.random(), 7), i % 3 === 0 ? bushMat : treeMat);
+      crown.position.y = 1.1;
+      tree.add(trunk, crown);
+      tree.position.set(x, this._terrainHeight(x, z), z);
+      tree.scale.setScalar(0.6 + Math.random() * 0.8);
+      tree.visible = false;
+      tree.userData.tfThreshold = 0.08 + Math.random() * 0.85;
+      this.vegGroup.add(tree);
+    }
+    this.scene.add(this.vegGroup);
   }
 
   _buildLights() {
@@ -250,17 +390,43 @@ export class ColonyEngine {
 
   _terrainHeight(x, z) {
     if (!this.ground) return 0;
-    const geo = this.ground.geometry;
     const segments = 128;
     const half = 100;
-    const u = (x + half) / 200;
-    const v = (z + half) / 200;
+    const u = THREE.MathUtils.clamp((x + half) / 200, 0, 1);
+    const v = THREE.MathUtils.clamp((z + half) / 200, 0, 1);
     const ix = Math.floor(u * segments);
     const iy = Math.floor(v * segments);
     const idx = iy * (segments + 1) + ix;
-    const verts = geo.attributes.position;
+    const verts = this.ground.geometry.attributes.position;
     if (idx >= verts.count) return 0;
     return verts.getY(idx);
+  }
+
+  _applyTerraformVisuals(tf, complete) {
+    const t = complete ? 1 : tf;
+    if (Math.abs(t - this._lastTf) < 0.005 && !complete) return;
+    this._lastTf = t;
+
+    this.groundMat.color.copy(this._barrenColor).lerp(this._lushColor, t * 0.92);
+    this.groundMat.roughness = 0.9 - t * 0.35;
+    if (t > 0.1) {
+      this.groundMat.emissive = new THREE.Color(0x0a2a0a);
+      this.groundMat.emissiveIntensity = t * 0.22;
+    }
+
+    const fogCol = new THREE.Color(this.planet.fog).lerp(new THREE.Color(0x8ac4e8), t * 0.7);
+    this.scene.fog.color.copy(fogCol);
+    this.scene.fog.density = 0.0035 * (1 - t * 0.65);
+    this.scene.background.copy(this._skyBarren).lerp(this._skyLush, t * 0.75);
+    this._updateSkyColors(t);
+
+    this.vegGroup.children.forEach((tree) => {
+      tree.visible = t >= tree.userData.tfThreshold;
+      if (tree.visible) {
+        const fade = Math.min(1, (t - tree.userData.tfThreshold) * 4);
+        tree.scale.setScalar((0.6 + (tree.userData.tfThreshold % 0.4)) * fade);
+      }
+    });
   }
 
   _createBuildingMesh(type) {
@@ -268,84 +434,107 @@ export class ColonyEngine {
     const accent = new THREE.Color(this.planet.accent);
 
     if (type === 'habitat') {
-      const dome = new THREE.Mesh(
-        new THREE.SphereGeometry(2.2, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-        new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.3, metalness: 0.5, transparent: true, opacity: 0.78 })
-      );
-      const base = new THREE.Mesh(
-        new THREE.CylinderGeometry(2.2, 2.4, 1.2, 24),
-        new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.6, metalness: 0.4 })
-      );
-      base.position.y = 0.6;
-      dome.position.y = 1.2;
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(2.2, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.3, metalness: 0.5, transparent: true, opacity: 0.78 }));
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 1.2, 24),
+        new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.6, metalness: 0.4 }));
+      base.position.y = 0.6; dome.position.y = 1.2;
       grp.add(base, dome);
     } else if (type === 'solar') {
       for (let i = 0; i < 4; i++) {
-        const panel = new THREE.Mesh(
-          new THREE.BoxGeometry(3, 0.08, 1.2),
-          new THREE.MeshStandardMaterial({ color: 0x1a2a4a, roughness: 0.2, metalness: 0.8, emissive: 0x2244aa, emissiveIntensity: 0.2 })
-        );
-        panel.position.set((i - 1.5) * 1.6, 0.8, 0);
-        panel.rotation.x = -0.4;
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(3, 0.08, 1.2),
+          new THREE.MeshStandardMaterial({ color: 0x1a2a4a, roughness: 0.2, metalness: 0.8, emissive: 0x2244aa, emissiveIntensity: 0.2 }));
+        panel.position.set((i - 1.5) * 1.6, 0.8, 0); panel.rotation.x = -0.4;
         grp.add(panel);
       }
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.6 }));
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.6 }));
       pole.position.y = 0.4;
       grp.add(pole);
+    } else if (type === 'farm') {
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(2.5, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0x4a8a4a, emissive: 0x1a4a1a, emissiveIntensity: 0.2, transparent: true, opacity: 0.85 }));
+      dome.position.y = 1.3;
+      const farmBase = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.7, 1, 20),
+        new THREE.MeshStandardMaterial({ color: 0x556655 }));
+      farmBase.position.y = 0.5;
+      grp.add(dome, farmBase);
     } else if (type === 'mine') {
-      const tower = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.2, 1.8, 3.5, 8),
-        new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.8, metalness: 0.3 })
-      );
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.8, 3.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.8 }));
       tower.position.y = 1.75;
-      const drill = new THREE.Mesh(
-        new THREE.ConeGeometry(0.6, 2, 8),
-        new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.35, metalness: 0.7 })
-      );
+      const drill = new THREE.Mesh(new THREE.ConeGeometry(0.6, 2, 8),
+        new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.35 }));
       drill.position.y = 3.8;
       grp.add(tower, drill);
     } else if (type === 'garage') {
-      const bay = new THREE.Mesh(
-        new THREE.BoxGeometry(5, 2.5, 4),
-        new THREE.MeshStandardMaterial({ color: 0x3a4a5a, roughness: 0.5, metalness: 0.5 })
-      );
+      const bay = new THREE.Mesh(new THREE.BoxGeometry(5, 2.5, 4),
+        new THREE.MeshStandardMaterial({ color: 0x3a4a5a, metalness: 0.5 }));
       bay.position.y = 1.25;
-      const door = new THREE.Mesh(
-        new THREE.PlaneGeometry(3.5, 2),
-        new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.25, transparent: true, opacity: 0.65, side: THREE.DoubleSide })
-      );
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 2),
+        new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.25, transparent: true, opacity: 0.65, side: THREE.DoubleSide }));
       door.position.set(0, 1.2, 2.01);
       grp.add(bay, door);
-    } else if (type === 'terraform') {
-      const core = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.5, 2, 4, 12),
-        new THREE.MeshStandardMaterial({ color: 0x2a5a3a, emissive: 0x44ff88, emissiveIntensity: 0.3, metalness: 0.4 })
-      );
+    } else if (type === 'terraform' || type === 'hydroponics') {
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2, 4, 12),
+        new THREE.MeshStandardMaterial({ color: 0x2a5a3a, emissive: 0x44ff88, emissiveIntensity: 0.35 }));
       core.position.y = 2;
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(2.5, 0.15, 8, 32),
-        new THREE.MeshStandardMaterial({ color: 0x00ffaa, emissive: 0x00ffaa, emissiveIntensity: 0.55 })
-      );
-      ring.rotation.x = Math.PI / 2;
-      ring.position.y = 3.5;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.5, 0.15, 8, 32),
+        new THREE.MeshStandardMaterial({ color: 0x00ffaa, emissive: 0x00ffaa, emissiveIntensity: 0.55 }));
+      ring.rotation.x = Math.PI / 2; ring.position.y = 3.5;
       grp.add(core, ring);
-    } else if (type === 'research') {
-      const lab = new THREE.Mesh(
-        new THREE.BoxGeometry(3.5, 2.8, 3.5),
-        new THREE.MeshStandardMaterial({ color: 0x4a5a7a, roughness: 0.35, metalness: 0.55 })
-      );
+    } else if (type === 'research' || type === 'comms') {
+      const lab = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2.8, 3.5),
+        new THREE.MeshStandardMaterial({ color: 0x4a5a7a, metalness: 0.55 }));
       lab.position.y = 1.4;
-      const dish = new THREE.Mesh(
-        new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-        new THREE.MeshStandardMaterial({ color: 0xeeeeff, metalness: 0.8, roughness: 0.15 })
-      );
-      dish.position.y = 3.2;
+      const dish = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0xeeeeff, metalness: 0.8 }));
+      dish.position.y = 3.4;
       grp.add(lab, dish);
+    } else if (type === 'spaceport') {
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2, 8, 10),
+        new THREE.MeshStandardMaterial({ color: 0x4a5a6a, metalness: 0.6 }));
+      tower.position.y = 4;
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0xff4444, emissive: 0xff0000, emissiveIntensity: 0.8 }));
+      beacon.position.y = 8.5;
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.5, 0.3, 24),
+        new THREE.MeshStandardMaterial({ color: 0x334455 }));
+      pad.position.y = 0.15;
+      grp.add(tower, beacon, pad);
+    } else if (type === 'starfleet_yard') {
+      const hall = new THREE.Mesh(new THREE.BoxGeometry(10, 4, 7),
+        new THREE.MeshStandardMaterial({ color: 0x3a4a5a, metalness: 0.5 }));
+      hall.position.y = 2;
+      const crane = new THREE.Mesh(new THREE.BoxGeometry(0.4, 6, 0.4),
+        new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff8800, emissiveIntensity: 0.3 }));
+      crane.position.set(3, 3, 0);
+      grp.add(hall, crane);
+    } else if (type === 'starship') {
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, 6, 12),
+        new THREE.MeshStandardMaterial({ color: 0xccddee, metalness: 0.8, roughness: 0.2 }));
+      body.rotation.x = Math.PI / 2; body.position.y = 2;
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2, 12),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.9 }));
+      nose.rotation.x = -Math.PI / 2; nose.position.set(0, 2, -4);
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(5, 0.15, 1.5),
+        new THREE.MeshStandardMaterial({ color: 0x8899aa, metalness: 0.7 }));
+      wing.position.y = 1.8;
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.9 }));
+      glow.position.set(0, 2, 3.5);
+      grp.add(body, nose, wing, glow);
+    } else if (type === 'shield') {
+      const gen = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.2, 3, 12),
+        new THREE.MeshStandardMaterial({ color: 0x5a6a8a, emissive: 0x4466ff, emissiveIntensity: 0.25 }));
+      gen.position.y = 1.5;
+      const bubble = new THREE.Mesh(new THREE.SphereGeometry(3.5, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0x4488ff, transparent: true, opacity: 0.15, emissive: 0x2244aa, emissiveIntensity: 0.4 }));
+      bubble.position.y = 2.5;
+      grp.add(gen, bubble);
     } else {
-      const depot = new THREE.Mesh(
-        new THREE.BoxGeometry(4, 2, 4),
-        new THREE.MeshStandardMaterial({ color: 0x6a5a4a, roughness: 0.7, metalness: 0.35 })
-      );
+      const depot = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 4),
+        new THREE.MeshStandardMaterial({ color: 0x6a5a4a }));
       depot.position.y = 1;
       grp.add(depot);
     }
@@ -356,16 +545,10 @@ export class ColonyEngine {
 
   syncState(state) {
     const tf = state.terraform / 100;
-    const barren = new THREE.Color(this.planet.color);
-    const lush = new THREE.Color(0x3a7a3a);
-    this.groundMat.color.copy(barren).lerp(lush, tf * 0.7);
-    if (tf > 0.15) {
-      this.groundMat.emissive = new THREE.Color(0x0a1a0a);
-      this.groundMat.emissiveIntensity = tf * 0.18;
-    }
+    this._applyTerraformVisuals(tf, state.terraformComplete);
 
     const storm = state.activeEvent?.type === 'dust_storm' ? (state.activeEvent.intensity || 0.5) : 0;
-    this.setStormIntensity(storm);
+    this.setStormIntensity(state.terraformComplete ? storm * 0.3 : storm);
 
     state.buildings.forEach((b) => {
       if (this.buildingMeshes.has(b.id)) return;
@@ -385,16 +568,8 @@ export class ColonyEngine {
         return;
       }
       const y = this._terrainHeight(node.x, node.z);
-      const crystal = new THREE.Mesh(
-        new THREE.OctahedronGeometry(1.2, 0),
-        new THREE.MeshStandardMaterial({
-          color: 0xffaa44,
-          emissive: 0xff6600,
-          emissiveIntensity: 0.55,
-          metalness: 0.6,
-          roughness: 0.2
-        })
-      );
+      const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(1.2, 0),
+        new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0xff6600, emissiveIntensity: 0.55, metalness: 0.6 }));
       crystal.position.set(node.x, y + 1.4, node.z);
       crystal.castShadow = true;
       this.scene.add(crystal);
@@ -408,10 +583,8 @@ export class ColonyEngine {
           mesh = this._roverTemplate.clone(true);
           mesh.scale.setScalar(this._roverScale || 1);
         } else {
-          mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(1.8, 1, 2.8),
-            new THREE.MeshStandardMaterial({ color: 0xffaa00, metalness: 0.6, roughness: 0.3 })
-          );
+          mesh = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1, 2.8),
+            new THREE.MeshStandardMaterial({ color: 0xffaa00, metalness: 0.6 }));
         }
         this.scene.add(mesh);
         this.truckMeshes.set(truck.id, mesh);
@@ -423,17 +596,16 @@ export class ColonyEngine {
   }
 
   pickGround(clientX, clientY) {
+    if (this.viewMode === 'fps') return null;
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 1) return null;
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const targets = [this.pickPlane, this.ground].filter(Boolean);
-    const hits = this.raycaster.intersectObjects(targets, false);
+    const hits = this.raycaster.intersectObjects([this.pickPlane, this.ground].filter(Boolean), false);
     if (!hits.length) return null;
     const p = hits[0].point;
-    const dist = Math.hypot(p.x, p.z);
-    if (dist < 8) return null;
+    if (Math.hypot(p.x, p.z) < 8) return null;
     return { x: p.x, z: p.z };
   }
 
@@ -448,7 +620,8 @@ export class ColonyEngine {
     this.camera.updateProjectionMatrix();
   }
 
-  render(t = 0) {
+  render(t = 0, dt = 0.016) {
+    this._updateFPS(dt);
     if (this.dust && this.stormIntensity > 0.05) {
       const pos = this.dust.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) {
@@ -457,12 +630,13 @@ export class ColonyEngine {
       }
       pos.needsUpdate = true;
     }
-    this.controls.update();
+    if (this.viewMode === 'orbit') this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
     this._stopResize?.();
+    this.pointerLock?.unlock();
     this.renderer.dispose();
   }
 }

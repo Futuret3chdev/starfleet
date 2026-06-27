@@ -1,13 +1,13 @@
 import { getPlanet } from './planets.js';
 import { BUILDINGS } from './buildings.js';
 
-const SAVE_KEY = 'starfleet-save-v2';
-const SAVE_KEY_LEGACY = ['starfeet-save-v2', 'starfeet-save-v1', 'starfleet-save-v1'];
+const SAVE_KEY = 'starfleet-save-v3';
+const SAVE_KEY_LEGACY = ['starfleet-save-v2', 'starfeet-save-v2', 'starfeet-save-v1', 'starfleet-save-v1'];
 
 export function newColony(planetId, colonyName = 'Outpost Alpha') {
   const planet = getPlanet(planetId);
   return {
-    version: 2,
+    version: 3,
     planetId,
     colonyName,
     tick: 0,
@@ -20,6 +20,7 @@ export function newColony(planetId, colonyName = 'Outpost Alpha') {
     population: 8,
     popCap: 10,
     terraform: planet.terraformBase,
+    terraformComplete: false,
     storage: 300,
     buildings: [
       { id: 'starter-solar', type: 'solar', x: 14, z: 2, level: 1 }
@@ -81,9 +82,43 @@ export function canAfford(state, cost) {
   return state.credits >= (cost.credits || 0) && state.minerals >= (cost.minerals || 0);
 }
 
+export function getFleetCap(state) {
+  return state.buildings.reduce((sum, b) => sum + (BUILDINGS[b.type]?.fleetCap || 0), 0);
+}
+
+export function getFleetCount(state) {
+  return state.buildings.filter((b) => b.type === 'starship').length;
+}
+
+export function isBuildingUnlocked(state, type) {
+  const def = BUILDINGS[type];
+  if (!def) return false;
+  if (state.terraformComplete) return true;
+  if (def.requiresTerraform != null && state.terraform < def.requiresTerraform) return false;
+  if (def.requires && !state.buildings.some((b) => b.type === def.requires)) return false;
+  if (type === 'starship' && getFleetCount(state) >= getFleetCap(state)) return false;
+  return true;
+}
+
+export function getBuildingLockReason(state, type) {
+  const def = BUILDINGS[type];
+  if (!def) return 'Unknown';
+  if (state.terraformComplete) return null;
+  if (def.requiresTerraform != null && state.terraform < def.requiresTerraform) {
+    return `Needs ${def.requiresTerraform}% terraform`;
+  }
+  if (def.requires && !state.buildings.some((b) => b.type === def.requires)) {
+    return `Needs ${BUILDINGS[def.requires]?.name || def.requires}`;
+  }
+  if (type === 'starship' && getFleetCount(state) >= getFleetCap(state)) {
+    return 'Fleet capacity full — build Shipyard/Spaceport';
+  }
+  return null;
+}
+
 export function placeBuilding(state, type, x, z) {
   const def = BUILDINGS[type];
-  if (!def || !canAfford(state, def.cost)) return false;
+  if (!def || !canAfford(state, def.cost) || !isBuildingUnlocked(state, type)) return false;
   const occupied = state.buildings.some((b) => Math.hypot(b.x - x, b.z - z) < 4.5);
   if (occupied) return false;
 
@@ -94,6 +129,8 @@ export function placeBuilding(state, type, x, z) {
   if (def.popCap) state.popCap += def.popCap;
   if (def.storage) state.storage += def.storage;
   if (def.truckCap) spawnTrucks(state, def.truckCap, x, z);
+  if (def.fleetCap) pushLog(state, `Fleet capacity +${def.fleetCap}`);
+  if (def.fleet) pushLog(state, 'Starship commissioned — Starfleet grows');
   return true;
 }
 
@@ -101,8 +138,7 @@ function spawnTrucks(state, count, x = 0, z = 0) {
   for (let i = 0; i < count; i++) {
     state.trucks.push({
       id: `truck-${Date.now()}-${i}`,
-      x,
-      z,
+      x, z,
       targetNode: null,
       cargo: 0,
       phase: 'idle',
@@ -138,8 +174,23 @@ function pushLog(state, msg) {
   if (state.log.length > 8) state.log.pop();
 }
 
+export function checkTerraformComplete(state) {
+  if (state.terraform >= 100 && !state.terraformComplete) {
+    state.terraform = 100;
+    state.terraformComplete = true;
+    state.credits += 5000;
+    state.minerals += 1000;
+    state.popCap += 50;
+    state.oxygen = 100;
+    state.food = 100;
+    pushLog(state, '🌍 TERRAFORM COMPLETE — Planet fully habitable!');
+    return true;
+  }
+  return false;
+}
+
 export function simulateTick(state, dt = 1) {
-  if (state.paused) return;
+  if (state.paused) return { terraformJustComplete: false };
   state.tick += dt;
 
   updateEvents(state, dt);
@@ -148,9 +199,14 @@ export function simulateTick(state, dt = 1) {
   let powerUse = 0;
   let harvest = 0;
   let terraformRate = 0;
+  let foodRate = 0;
+  let creditBoost = 1;
+  let stormShield = 0;
 
   const storm = state.activeEvent?.type === 'dust_storm';
-  const stormPenalty = storm ? (1 - (state.activeEvent.intensity || 0.5) * 0.6) : 1;
+  const stormPenalty = storm
+    ? (1 - (state.activeEvent.intensity || 0.5) * 0.6 * (1 - stormShield))
+    : 1;
 
   state.buildings.forEach((b) => {
     const def = BUILDINGS[b.type];
@@ -159,11 +215,13 @@ export function simulateTick(state, dt = 1) {
     else powerUse += Math.abs(def.power);
     if (def.harvest) harvest += def.harvest;
     if (def.terraform) terraformRate += def.terraform;
+    if (def.foodRate) foodRate += def.foodRate;
+    if (def.creditBoost) creditBoost += def.creditBoost * 0.15;
+    if (def.stormShield) stormShield = Math.max(stormShield, def.stormShield);
   });
 
-  // Passive colony terraforming (atmospheric scrubbers, always runs)
-  const passiveTerraform = 0.025 + state.population * 0.001;
-  const poweredTerraform = terraformRate;
+  const passiveTerraform = 0.03 + state.population * 0.0015;
+  const completeBonus = state.terraformComplete ? 0 : 0;
 
   state.energy = Math.min(state.energyCap, state.energy + powerGen * dt);
   const powerRatio = powerUse > 0
@@ -172,23 +230,26 @@ export function simulateTick(state, dt = 1) {
   state.energy = Math.max(0, state.energy - powerUse * dt);
 
   const habitatCount = state.buildings.filter((b) => b.type === 'habitat').length;
-  const tfGain = passiveTerraform * dt
-    + poweredTerraform * powerRatio * dt;
-  state.terraform = Math.min(100, state.terraform + tfGain);
+  const tfGain = (passiveTerraform + completeBonus) * dt + terraformRate * powerRatio * dt;
+  if (!state.terraformComplete) {
+    state.terraform = Math.min(100, state.terraform + tfGain);
+  }
 
   if (powerRatio > 0.15 || powerGen >= powerUse) {
     state.minerals += harvest * Math.max(powerRatio, 0.4) * dt * 0.5;
-    state.credits += state.population * 0.8 * dt;
-    state.oxygen = Math.min(100, state.oxygen + (0.08 + state.terraform * 0.003) * dt);
-    state.food = Math.min(100, state.food + (habitatCount * 1.2 + 0.2) * dt);
+    state.credits += state.population * 0.8 * creditBoost * dt;
+    state.oxygen = Math.min(100, state.oxygen + (0.1 + state.terraform * 0.004) * dt);
+    state.food = Math.min(100, state.food + (habitatCount * 1.2 + foodRate + 0.3) * dt);
   } else {
     state.oxygen = Math.max(0, state.oxygen - 0.3 * dt);
     state.food = Math.max(0, state.food - 0.25 * dt);
   }
 
-  state.population = Math.min(state.popCap, state.population + (state.food > 40 ? 0.02 : -0.05) * dt);
-
+  state.population = Math.min(state.popCap, state.population + (state.food > 40 ? 0.03 : -0.04) * dt);
   updateTrucks(state, dt);
+
+  const terraformJustComplete = checkTerraformComplete(state);
+  return { terraformJustComplete };
 }
 
 function updateEvents(state, dt) {
@@ -210,10 +271,10 @@ function updateEvents(state, dt) {
     return;
   }
 
-  if (state.eventCooldown > 0) return;
+  if (state.eventCooldown > 0 || state.terraformComplete) return;
 
   const planet = getPlanet(state.planetId);
-  const chance = (planet.stormChance || 0.15) * dt * 0.15;
+  const chance = (planet.stormChance || 0.15) * dt * 0.12;
   if (Math.random() < chance) {
     state.activeEvent = {
       type: 'dust_storm',
@@ -230,6 +291,7 @@ function eventLabel(ev) {
 }
 
 export function getEventMessage(state) {
+  if (state.terraformComplete) return '🌍 Planet habitable — Starfleet era begun';
   if (!state.activeEvent) return null;
   if (state.activeEvent.type === 'dust_storm') {
     return `⚠ Dust Storm — solar −${Math.round((state.activeEvent.intensity || 0.5) * 60)}%`;
@@ -304,7 +366,8 @@ export function loadGame() {
       }
       if (raw) {
         const legacy = JSON.parse(raw);
-        legacy.version = 2;
+        legacy.version = 3;
+        legacy.terraformComplete = legacy.terraformComplete ?? (legacy.terraform >= 100);
         legacy.activeEvent = legacy.activeEvent ?? null;
         legacy.eventCooldown = legacy.eventCooldown ?? 30;
         legacy.log = legacy.log ?? [];

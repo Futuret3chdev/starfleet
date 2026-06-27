@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=6">
+  <link rel="stylesheet" href="/css/style.css?v=7">
 </head>
 <body>
   <div id="app">
@@ -23,7 +23,7 @@
       <div class="title-content">
         <p class="title-tag">MT Ecosystem · Futuret3ch</p>
         <h1 class="title-logo">STARFLEET</h1>
-        <p class="title-tag">Space Colony Strategy · v2</p>
+        <p class="title-tag">Space Colony Strategy · v7</p>
         <nav class="title-nav">
           <button class="btn-primary" id="btn-new-game" type="button">New Expedition</button>
           <button class="btn-secondary" id="btn-continue" type="button" style="display:none">Continue Colony</button>
@@ -72,8 +72,10 @@
           <span class="res-pill"><strong>👥</strong><span id="res-pop">0</span></span>
           <span class="res-pill"><strong>O₂</strong><span id="res-oxygen">0</span></span>
           <span class="res-pill"><strong>🌾</strong><span id="res-food">0</span></span>
+          <span class="res-pill"><strong>🛸</strong><span id="res-fleet">—</span></span>
         </div>
         <div class="hud-actions">
+          <button class="icon-btn" id="btn-fps" type="button" title="First-person view (V)">👁</button>
           <button class="icon-btn" id="btn-pause" type="button" title="Pause">⏸</button>
           <button class="icon-btn" id="btn-menu" type="button" title="Main menu">☰</button>
         </div>
@@ -89,17 +91,42 @@
 
       <ul id="colony-log" class="colony-log"></ul>
 
-      <aside class="build-panel">
-        <h3>Construct</h3>
-        <div id="build-list"></div>
-        <p id="build-hint">Select a structure, then click the map</p>
+      <aside class="build-panel" id="build-panel">
+        <div class="panel-header">
+          <h3>Construct</h3>
+          <button class="panel-toggle" id="btn-build-toggle" type="button" title="Minimize">−</button>
+        </div>
+        <div class="panel-body">
+          <div id="build-list"></div>
+          <p id="build-hint">Select a structure, then click cyan rings</p>
+        </div>
       </aside>
+
+      <button class="fab" id="fab-build" type="button" title="Open build menu">🔨</button>
 
       <button id="explore-btn" type="button">Explore Sectors</button>
       <aside class="explore-panel" id="explore-panel">
-        <h3>Sector Map</h3>
-        <div id="explore-grid"></div>
+        <div class="panel-header">
+          <h3>Sector Map</h3>
+          <button class="panel-toggle" id="btn-explore-toggle" type="button" title="Minimize">−</button>
+        </div>
+        <div class="panel-body">
+          <div id="explore-grid"></div>
+        </div>
       </aside>
+
+      <div id="mobile-controls" class="mobile-controls">
+        <div id="mobile-joy" class="mobile-joy"><div id="mobile-joy-knob" class="mobile-joy-knob"></div></div>
+        <p class="mobile-hint">Drag right side to look · Joystick to walk</p>
+      </div>
+
+      <div id="victory-modal" class="victory-modal">
+        <div class="victory-card">
+          <h2>🌍 Terraform Complete!</h2>
+          <p id="victory-msg"></p>
+          <button class="btn-primary" id="btn-victory-close" type="button">Continue Command</button>
+        </div>
+      </div>
     </section>
 
     <div id="toast"></div>
@@ -113,6 +140,6 @@
     }
   }
   </script>
-  <script type="module" src="/js/main.js?v=6"></script>
+  <script type="module" src="/js/main.js?v=7"></script>
 </body>
 </html>
