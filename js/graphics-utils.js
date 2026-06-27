@@ -107,41 +107,22 @@ export function isMobileGPU() {
   return window.innerWidth < 700 || window.matchMedia('(pointer: coarse)').matches;
 }
 
-/** Try several WebGL configs — mobile GPUs often reject the first attempt. */
+/** v7-style renderer — worked on mobile; single AA-off fallback only. */
 export function createWebGLRenderer(canvas) {
   const mobile = isMobileGPU();
-  const dpr = Math.min(window.devicePixelRatio || 1, mobile ? 1 : 2);
-  const attempts = [
-    { antialias: false, alpha: false, failIfMajorPerformanceCaveat: false, powerPreference: 'low-power', stencil: false },
-    { antialias: false, alpha: false, failIfMajorPerformanceCaveat: false, powerPreference: 'default' },
-    { antialias: false, alpha: true, failIfMajorPerformanceCaveat: false, powerPreference: 'low-power' }
+  const configs = [
+    { antialias: true, alpha: false, failIfMajorPerformanceCaveat: false },
+    { antialias: false, alpha: false, failIfMajorPerformanceCaveat: false }
   ];
-  for (const opts of attempts) {
+  for (const opts of configs) {
     try {
       const renderer = new THREE.WebGLRenderer({ canvas, ...opts });
-      const gl = renderer.getContext();
-      if (!gl || gl.isContextLost()) {
-        renderer.dispose();
-        continue;
-      }
-      renderer.setPixelRatio(dpr);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
-      return { renderer, dpr, mobile };
-    } catch (_) { /* try next config */ }
+      return { renderer, mobile };
+    } catch (_) { /* try without antialias */ }
   }
-  return { renderer: null, dpr, mobile };
-}
-
-/** Size canvas element before WebGL context creation. */
-export function primeCanvasSize(canvas) {
-  const parent = canvas?.parentElement;
-  if (!parent) return { w: 0, h: 0 };
-  const { w, h } = getParentSize(parent);
-  if (w < 2 || h < 2) return { w, h };
-  const dpr = Math.min(window.devicePixelRatio || 1, isMobileGPU() ? 1 : 2);
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
-  return { w, h, dpr };
+  return { renderer: null, mobile };
 }
 
 /** Reliable size for WebGL parents — iOS often reports 0 until layout settles. */

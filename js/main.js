@@ -8,7 +8,7 @@ import {
   newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame,
   canAfford, isBuildingUnlocked, getBuildingLockReason, launchFleetMission, getIdleShips
 } from './game-state.js';
-import { primeCanvasSize } from './graphics-utils.js';
+
 import {
   bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid,
   updateEventBanner, updateFleetPanel, showVictory, showStageAdvance, toast
@@ -54,7 +54,6 @@ function startPlanetSelect() {
   const canvas = document.getElementById('select-canvas');
   if (!canvas) return;
   if (selectView) selectView.dispose();
-  primeCanvasSize(canvas);
   try {
     selectView = new PlanetSelectView(canvas);
   } catch (err) {
@@ -129,12 +128,7 @@ function beginColonyAfterLayout() {
     requestAnimationFrame(() => {
       startColonyLoop();
       [100, 400, 900].forEach((ms) => {
-        setTimeout(() => {
-          const canvas = document.getElementById('colony-canvas');
-          if (!canvas || !state) return;
-          if (!colonyEngine?.isReady) initColonyEngine(canvas);
-          colonyEngine?.resize();
-        }, ms);
+        setTimeout(() => colonyEngine?.resize(), ms);
       });
     });
   });
@@ -250,7 +244,6 @@ function initColonyEngine(canvas) {
   wrap?.classList.remove('fallback-2d');
   if (fb) fb.hidden = true;
 
-  primeCanvasSize(canvas);
   try {
     colonyEngine = new ColonyEngine(canvas, state.planetId);
   } catch (err) {
@@ -259,13 +252,14 @@ function initColonyEngine(canvas) {
   }
 
   if (!colonyEngine?.isReady) {
-    colonyEngine = colonyEngine || null;
     if (fb) {
       fb.hidden = false;
       fb.textContent = '3D view unavailable — tap 🔨 Build below to play (game fully works)';
     }
     wrap?.classList.add('fallback-2d');
-    toast('3D view unavailable — menus still work');
+  } else if (fb) {
+    fb.hidden = true;
+    wrap?.classList.remove('fallback-2d');
   }
   colonyEngine?.resize();
 }

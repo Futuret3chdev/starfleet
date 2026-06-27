@@ -6,7 +6,7 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { getPlanet } from './planets.js';
 import {
   makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize,
-  createWebGLRenderer, isMobileGPU
+  createWebGLRenderer
 } from './graphics-utils.js';
 
 const ROVER_URL = '/assets/mars-rover.glb';
@@ -27,13 +27,13 @@ export class ColonyEngine {
     this._fpsYaw = 0;
     this._fpsPitch = 0;
     this._lastTf = -1;
-    this.mobileLite = isMobileGPU();
+    this._contextLost = false;
 
     const gpu = createWebGLRenderer(canvas);
     this.renderer = gpu.renderer;
     if (this.renderer) {
-      this.renderer.shadowMap.enabled = !this.mobileLite;
-      if (!this.mobileLite) this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.2;
     }
@@ -43,8 +43,7 @@ export class ColonyEngine {
       return;
     }
 
-    try {
-      this.scene = new THREE.Scene();
+    this.scene = new THREE.Scene();
       this.scene.background = new THREE.Color(this.planet.sky);
       this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.0035);
       this._barrenColor = new THREE.Color(this.planet.color);
@@ -68,7 +67,11 @@ export class ColonyEngine {
       this.fpsPivot.add(this.camera);
       this.camera.position.set(0, 0, 0);
 
-      this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
+      try {
+        this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
+      } catch (_) {
+        this.pointerLock = null;
+      }
 
       this.raycaster = new THREE.Raycaster();
       this.pointer = new THREE.Vector2();
@@ -88,16 +91,9 @@ export class ColonyEngine {
       this.scene.add(this.camera);
       this.camera.position.copy(this._orbitCamPos);
 
-      this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
-      this.setBuildMode(false);
-      this.setViewMode('orbit');
-    } catch (err) {
-      console.error('Colony scene init failed', err);
-      this.renderer?.dispose();
-      this.renderer = null;
-      this._showFallback('3D view unavailable — tap 🔨 Build below to play');
-      return;
-    }
+    this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
+    this.setBuildMode(false);
+    this.setViewMode('orbit');
 
     this._onContextLost = (e) => {
       e.preventDefault();
@@ -144,7 +140,7 @@ export class ColonyEngine {
       this.fpsPivot.rotation.set(0, this._fpsYaw, 0);
       this.canvas.classList.add('fps-mode');
     } else {
-      this.pointerLock.unlock();
+      this.pointerLock?.unlock();
       const fp = this.fpsPivot.position.clone();
       this.camera.removeFromParent();
       this.scene.add(this.camera);
@@ -165,7 +161,7 @@ export class ColonyEngine {
 
   requestPointerLock() {
     if (this.viewMode === 'fps' && !('ontouchstart' in window)) {
-      this.pointerLock.lock();
+      this.pointerLock?.lock();
     }
   }
 
@@ -241,7 +237,7 @@ export class ColonyEngine {
   }
 
   _buildSky() {
-    const skyGeo = new THREE.SphereGeometry(380, this.mobileLite ? 16 : 32, this.mobileLite ? 8 : 16);
+    const skyGeo = new THREE.SphereGeometry(380, 32, 16);
     const skyMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true });
     this.skyVerts = skyGeo.attributes.position;
     this.skyColors = new Float32Array(this.skyVerts.count * 3);
@@ -267,7 +263,7 @@ export class ColonyEngine {
 
   _buildWorld() {
     const starGeo = new THREE.BufferGeometry();
-    const starCount = this.mobileLite ? 500 : 1800;
+    const starCount = 1800;
     const pos = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
       const r = 180 + Math.random() * 200;
@@ -280,8 +276,8 @@ export class ColonyEngine {
     starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     this.scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.4, sizeAttenuation: true })));
 
-    const hm = makeHeightmap(this.planet, this.mobileLite ? 128 : 256);
-    const segments = this.mobileLite ? 48 : 128;
+    const hm = makeHeightmap(this.planet);
+    const segments = 128;
     this._terrainSegments = segments;
     const geo = new THREE.PlaneGeometry(200, 200, segments, segments);
     const verts = geo.attributes.position;
@@ -297,7 +293,7 @@ export class ColonyEngine {
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
 
-    const groundTex = makeTerrainTexture(this.planet, this.mobileLite ? 256 : 512);
+    const groundTex = makeTerrainTexture(this.planet);
     this.groundMat = new THREE.MeshStandardMaterial({
       map: groundTex,
       roughness: 0.9,
@@ -306,7 +302,7 @@ export class ColonyEngine {
     });
     this.ground = new THREE.Mesh(geo, this.groundMat);
     this.ground.rotation.x = -Math.PI / 2;
-    this.ground.receiveShadow = !this.mobileLite;
+    this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
     this.pickPlane = new THREE.Mesh(
@@ -346,8 +342,7 @@ export class ColonyEngine {
     this.vegGroup = new THREE.Group();
     const treeMat = new THREE.MeshStandardMaterial({ color: 0x2d6b2d, roughness: 0.8 });
     const bushMat = new THREE.MeshStandardMaterial({ color: 0x3a8a3a, roughness: 0.85 });
-    const vegCount = this.mobileLite ? 30 : 120;
-    for (let i = 0; i < vegCount; i++) {
+    for (let i = 0; i < 120; i++) {
       const x = (Math.random() - 0.5) * 170;
       const z = (Math.random() - 0.5) * 170;
       if (Math.hypot(x, z) < 14) continue;
@@ -371,16 +366,14 @@ export class ColonyEngine {
     this.scene.add(this.ambient);
     this.sun = new THREE.DirectionalLight(0xffeedd, 1.5);
     this.sun.position.set(55, 75, 35);
-    this.sun.castShadow = !this.mobileLite;
-    if (!this.mobileLite) {
-      this.sun.shadow.mapSize.set(1024, 1024);
-      this.sun.shadow.camera.near = 10;
-      this.sun.shadow.camera.far = 200;
-      this.sun.shadow.camera.left = -70;
-      this.sun.shadow.camera.right = 70;
-      this.sun.shadow.camera.top = 70;
-      this.sun.shadow.camera.bottom = -70;
-    }
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.camera.near = 10;
+    this.sun.shadow.camera.far = 200;
+    this.sun.shadow.camera.left = -70;
+    this.sun.shadow.camera.right = 70;
+    this.sun.shadow.camera.top = 70;
+    this.sun.shadow.camera.bottom = -70;
     this.scene.add(this.sun);
     this.scene.add(new THREE.HemisphereLight(0x88aacc, 0x221108, 0.5));
   }
