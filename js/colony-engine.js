@@ -44,9 +44,37 @@ export class ColonyEngine {
     this._buildWorld();
     this._buildLights();
     this._buildDust();
+    this._buildPreviewRing();
     this._loadRover();
 
     this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
+  }
+
+  _buildPreviewRing() {
+    this.previewRing = new THREE.Mesh(
+      new THREE.RingGeometry(2.2, 2.6, 32),
+      new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+    );
+    this.previewRing.rotation.x = -Math.PI / 2;
+    this.previewRing.visible = false;
+    this.scene.add(this.previewRing);
+  }
+
+  setBuildPreview(buildType, clientX, clientY) {
+    if (!this.previewRing) return;
+    if (!buildType || clientX == null) {
+      this.previewRing.visible = false;
+      return;
+    }
+    const pos = this.pickGround(clientX, clientY);
+    if (!pos) {
+      this.previewRing.visible = false;
+      return;
+    }
+    const y = this._terrainHeight(pos.x, pos.z) + 0.2;
+    this.previewRing.position.set(pos.x, y, pos.z);
+    this.previewRing.visible = true;
+    this.previewRing.material.color.set(0x00e5ff);
   }
 
   _buildSky() {

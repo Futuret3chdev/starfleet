@@ -11,17 +11,19 @@ export function newColony(planetId, colonyName = 'Outpost Alpha') {
     planetId,
     colonyName,
     tick: 0,
-    credits: 1200,
-    minerals: 200,
-    energy: 40,
-    energyCap: 60,
+    credits: 1400,
+    minerals: 250,
+    energy: 80,
+    energyCap: 120,
     oxygen: 80,
     food: 60,
     population: 8,
     popCap: 10,
     terraform: planet.terraformBase,
     storage: 300,
-    buildings: [],
+    buildings: [
+      { id: 'starter-solar', type: 'solar', x: 14, z: 2, level: 1 }
+    ],
     trucks: [],
     nodes: generateNodes(planet),
     sectors: generateSectors(planet),
@@ -159,19 +161,29 @@ export function simulateTick(state, dt = 1) {
     if (def.terraform) terraformRate += def.terraform;
   });
 
-  state.energy = Math.min(state.energyCap, state.energy + powerGen * dt * 0.5);
-  const powerRatio = powerUse > 0 ? Math.min(1, state.energy / powerUse) : 1;
-  state.energy = Math.max(0, state.energy - powerUse * dt * 0.5);
+  // Passive colony terraforming (atmospheric scrubbers, always runs)
+  const passiveTerraform = 0.025 + state.population * 0.001;
+  const poweredTerraform = terraformRate;
 
-  if (powerRatio > 0.3) {
-    state.terraform = Math.min(100, state.terraform + terraformRate * powerRatio * dt);
-    state.minerals += harvest * powerRatio * dt * 0.4;
-    state.credits += state.population * 0.6 * dt;
-    state.oxygen = Math.min(100, state.oxygen + state.terraform * 0.002 * dt);
-    state.food = Math.min(100, state.food + (state.buildings.filter((b) => b.type === 'habitat').length * 0.8) * dt);
+  state.energy = Math.min(state.energyCap, state.energy + powerGen * dt);
+  const powerRatio = powerUse > 0
+    ? Math.min(1, (state.energy + powerGen * 0.5) / (powerUse + 1))
+    : 1;
+  state.energy = Math.max(0, state.energy - powerUse * dt);
+
+  const habitatCount = state.buildings.filter((b) => b.type === 'habitat').length;
+  const tfGain = passiveTerraform * dt
+    + poweredTerraform * powerRatio * dt;
+  state.terraform = Math.min(100, state.terraform + tfGain);
+
+  if (powerRatio > 0.15 || powerGen >= powerUse) {
+    state.minerals += harvest * Math.max(powerRatio, 0.4) * dt * 0.5;
+    state.credits += state.population * 0.8 * dt;
+    state.oxygen = Math.min(100, state.oxygen + (0.08 + state.terraform * 0.003) * dt);
+    state.food = Math.min(100, state.food + (habitatCount * 1.2 + 0.2) * dt);
   } else {
-    state.oxygen = Math.max(0, state.oxygen - 0.5 * dt);
-    state.food = Math.max(0, state.food - 0.4 * dt);
+    state.oxygen = Math.max(0, state.oxygen - 0.3 * dt);
+    state.food = Math.max(0, state.food - 0.25 * dt);
   }
 
   state.population = Math.min(state.popCap, state.population + (state.food > 40 ? 0.02 : -0.05) * dt);

@@ -1,8 +1,9 @@
 import { PLANETS, getPlanet } from './planets.js';
 import { PlanetSelectView } from './planet-select.js';
 import { ColonyEngine } from './colony-engine.js';
+import { BUILDINGS } from './buildings.js';
 import {
-  newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame, getEventMessage
+  newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame, canAfford
 } from './game-state.js';
 import { bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid, updateEventBanner, toast } from './ui.js';
 
@@ -114,7 +115,7 @@ function launchColony() {
   ui.show('colony');
   beginColonyAfterLayout();
   toast(`Colony established on ${getPlanet(selectedPlanetId).name}`);
-  setTimeout(() => toast('Build Solar + Habitat, then Mine & Garage for harvest rovers'), 3200);
+  setTimeout(() => toast('Starter solar is online — build Habitat, then Mine & Garage'), 3200);
 }
 
 function continueGame() {
@@ -141,17 +142,41 @@ function startColonyLoop() {
   colonyEngine = new ColonyEngine(canvas, state.planetId);
   colonyEngine.resize();
 
-  canvas.onclick = (e) => {
+  let pointerDown = null;
+  canvas.onpointerdown = (e) => {
+    if (e.button !== 0) return;
+    pointerDown = { x: e.clientX, y: e.clientY };
+    colonyEngine.setBuildPreview(selectedBuild, e.clientX, e.clientY);
+  };
+  canvas.onpointermove = (e) => {
+    if (selectedBuild) colonyEngine.setBuildPreview(selectedBuild, e.clientX, e.clientY);
+  };
+  canvas.onpointerup = (e) => {
+    if (e.button !== 0 || !pointerDown) return;
+    const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
+    pointerDown = null;
+    if (moved > 8) return;
     if (!selectedBuild || !state) return;
     const pos = colonyEngine.pickGround(e.clientX, e.clientY);
-    if (!pos) return;
+    if (!pos) {
+      toast('Click open terrain away from the landing pad');
+      return;
+    }
+    const def = BUILDINGS[selectedBuild];
+    if (!canAfford(state, def?.cost)) {
+      toast(`Need ₡${def.cost.credits} · ⛏${def.cost.minerals}`);
+      return;
+    }
     if (placeBuilding(state, selectedBuild, pos.x, pos.z)) {
-      toast(`${selectedBuild} constructed`);
+      toast(`${def.name} constructed`);
       selectedBuild = null;
+      colonyEngine.setBuildPreview(null);
+      colonyEngine.syncState(state);
       updateBuildPanel(state, null);
+      updateHUD(state);
       saveGame(state);
     } else {
-      toast('Cannot build here — check resources & spacing');
+      toast('Too close to another building — try further out');
     }
   };
 

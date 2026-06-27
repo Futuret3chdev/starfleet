@@ -76,7 +76,7 @@ export function updateHUD(state) {
   const tf = document.getElementById('terraform-bar');
   const tfLabel = document.getElementById('terraform-pct');
   if (tf) tf.style.width = `${state.terraform}%`;
-  if (tfLabel) tfLabel.textContent = `${state.terraform.toFixed(1)}%`;
+  if (tfLabel) tfLabel.textContent = `${state.terraform.toFixed(2)}%`;
 }
 
 export function updatePlanetCard(planet, colonyName) {
@@ -89,19 +89,24 @@ export function updatePlanetCard(planet, colonyName) {
 }
 
 export function updateBuildPanel(state, selectedBuild) {
+  if (!state) return;
   document.querySelectorAll('.build-btn').forEach((btn) => {
     const id = btn.dataset.build;
     const def = BUILDINGS[id];
     const afford = canAfford(state, def.cost);
     btn.classList.toggle('active', id === selectedBuild);
     btn.classList.toggle('disabled', !afford);
-    btn.disabled = !afford && id !== selectedBuild;
+    btn.disabled = false;
   });
   const hint = document.getElementById('build-hint');
   if (hint) {
-    hint.textContent = selectedBuild
-      ? `Click terrain to place ${BUILDINGS[selectedBuild].name}`
-      : 'Select a structure, then click the map';
+    if (!selectedBuild) {
+      hint.textContent = 'Select a structure, then click the terrain';
+    } else if (!canAfford(state, BUILDINGS[selectedBuild].cost)) {
+      hint.textContent = `Need ₡${BUILDINGS[selectedBuild].cost.credits} · ⛏${BUILDINGS[selectedBuild].cost.minerals} — gather more resources`;
+    } else {
+      hint.textContent = `Click terrain to place ${BUILDINGS[selectedBuild].name}`;
+    }
   }
 }
 

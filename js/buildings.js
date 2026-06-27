@@ -4,17 +4,18 @@ export const BUILDINGS = {
     id: 'habitat',
     name: 'Habitat Dome',
     icon: '🏠',
-    cost: { credits: 400, minerals: 80 },
-    power: -8,
+    cost: { credits: 280, minerals: 50 },
+    power: -6,
     popCap: 12,
-    desc: 'Pressurised living quarters for colonists'
+    terraform: 0.04,
+    desc: 'Pressurised living quarters — colonists & slow biosphere growth'
   },
   solar: {
     id: 'solar',
     name: 'Solar Array',
     icon: '☀️',
-    cost: { credits: 250, minerals: 40 },
-    power: 24,
+    cost: { credits: 150, minerals: 25 },
+    power: 30,
     desc: 'Generates energy from local starlight'
   },
   mine: {
@@ -39,10 +40,10 @@ export const BUILDINGS = {
     id: 'terraform',
     name: 'Terraform Plant',
     icon: '🌱',
-    cost: { credits: 800, minerals: 200 },
-    power: -20,
-    terraform: 0.08,
-    desc: 'Raises atmosphere, temperature & biosphere'
+    cost: { credits: 450, minerals: 100 },
+    power: -14,
+    terraform: 0.35,
+    desc: 'Raises atmosphere, temperature & biosphere — needs power'
   },
   research: {
     id: 'research',
