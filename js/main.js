@@ -111,8 +111,8 @@ function launchColony() {
 
   state = newColony(selectedPlanetId, name);
   selectedBuild = null;
-  startColonyLoop();
   ui.show('colony');
+  beginColonyAfterLayout();
   toast(`Colony established on ${getPlanet(selectedPlanetId).name}`);
   setTimeout(() => toast('Build Solar + Habitat, then Mine & Garage for harvest rovers'), 3200);
 }
@@ -123,14 +123,23 @@ function continueGame() {
   state = saved;
   selectedPlanetId = state.planetId;
   selectedBuild = null;
-  startColonyLoop();
   ui.show('colony');
+  beginColonyAfterLayout();
   toast('Welcome back, Commander');
+}
+
+function beginColonyAfterLayout() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => startColonyLoop());
+  });
 }
 
 function startColonyLoop() {
   const canvas = document.getElementById('colony-canvas');
+  if (!canvas) return;
+  colonyEngine?.dispose();
   colonyEngine = new ColonyEngine(canvas, state.planetId);
+  colonyEngine.resize();
 
   canvas.onclick = (e) => {
     if (!selectedBuild || !state) return;

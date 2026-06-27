@@ -29,14 +29,14 @@ export class ColonyEngine {
     this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.0035);
 
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 800);
-    this.camera.position.set(32, 38, 52);
+    this.camera.position.set(28, 34, 48);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
-    this.controls.maxPolarAngle = Math.PI / 2.15;
+    this.controls.maxPolarAngle = Math.PI / 2.05;
     this.controls.minDistance = 12;
     this.controls.maxDistance = 130;
-    this.controls.target.set(0, 2, 0);
+    this.controls.target.set(0, 1, 0);
 
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
@@ -50,35 +50,22 @@ export class ColonyEngine {
   }
 
   _buildSky() {
-    const skyGeo = new THREE.SphereGeometry(400, 32, 16);
-    const skyMat = new THREE.ShaderMaterial({
+    const skyGeo = new THREE.SphereGeometry(380, 32, 16);
+    const top = new THREE.Color(this.planet.skyTop || this.planet.sky);
+    const bottom = new THREE.Color(this.planet.fog);
+    const skyMat = new THREE.MeshBasicMaterial({
       side: THREE.BackSide,
-      uniforms: {
-        topColor: { value: new THREE.Color(this.planet.skyTop || this.planet.sky) },
-        bottomColor: { value: new THREE.Color(this.planet.fog) },
-        offset: { value: 20 },
-        exponent: { value: 0.55 }
-      },
-      vertexShader: `
-        varying vec3 vWorldPosition;
-        void main() {
-          vec4 wp = modelMatrix * vec4(position, 1.0);
-          vWorldPosition = wp.xyz;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 topColor;
-        uniform vec3 bottomColor;
-        uniform float offset;
-        uniform float exponent;
-        varying vec3 vWorldPosition;
-        void main() {
-          float h = normalize(vWorldPosition + offset).y;
-          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
-        }
-      `
+      vertexColors: true
     });
+    const colors = [];
+    const verts = skyGeo.attributes.position;
+    for (let i = 0; i < verts.count; i++) {
+      const y = verts.getY(i);
+      const t = Math.max(0, (y + 80) / 160);
+      const c = bottom.clone().lerp(top, t);
+      colors.push(c.r, c.g, c.b);
+    }
+    skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     this.scene.add(new THREE.Mesh(skyGeo, skyMat));
   }
 

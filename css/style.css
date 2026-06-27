@@ -226,12 +226,17 @@ html, body {
 }
 
 /* ── Colony ── */
-#colony-screen { position: relative; }
+#colony-screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
 
 .colony-canvas-wrap {
   position: absolute;
   inset: 0;
-  background: #060a12;
+  z-index: 0;
+  background: radial-gradient(ellipse at 50% 80%, rgba(40, 20, 10, 0.25), #060a12);
 }
 #colony-canvas {
   position: absolute;
