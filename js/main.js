@@ -1,17 +1,17 @@
-import { PLANETS, getPlanet } from './planets.js?v=17';
-import { PlanetSelectView } from './planet-select.js?v=17';
-import { ColonyEngine } from './colony-engine.js?v=17';
-import { BUILDINGS } from './buildings.js?v=17';
-import { getStage } from './terraform-stages.js?v=17';
-import { getMission } from './fleet-missions.js?v=17';
+import { PLANETS, getPlanet } from './planets.js?v=18';
+import { PlanetSelectView } from './planet-select.js?v=18';
+import { ColonyEngine } from './colony-engine.js?v=18';
+import { BUILDINGS } from './buildings.js?v=18';
+import { getStage } from './terraform-stages.js?v=18';
+import { getMission } from './fleet-missions.js?v=18';
 import {
   newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame,
   canAfford, isBuildingUnlocked, getBuildingLockReason, launchFleetMission, getIdleShips
-} from './game-state.js?v=17';
+} from './game-state.js?v=18';
 import {
   bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid,
   updateEventBanner, updateFleetPanel, showVictory, showStageAdvance, toast
-} from './ui.js?v=17';
+} from './ui.js?v=18';
 
 let selectView = null, colonyEngine = null, state = null;
 let selectedPlanetId = 'mars', selectedBuild = null;

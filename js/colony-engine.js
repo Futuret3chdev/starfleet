@@ -3,8 +3,11 @@ import { MOUSE } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import { getPlanet } from './planets.js?v=17';
-import { makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize, initWebGLRenderer } from './graphics-utils.js?v=17';
+import { getPlanet } from './planets.js?v=18';
+import {
+  makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize,
+  initWebGLRenderer, pointerLockSupported
+} from './graphics-utils.js?v=18';
 
 const ROVER_URL = '/assets/mars-rover.glb';
 
@@ -58,10 +61,13 @@ export class ColonyEngine {
     this.fpsPivot.add(this.camera);
     this.camera.position.set(0, 0, 0);
 
-    try {
-      this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
-    } catch (_) {
-      this.pointerLock = null;
+    this.pointerLock = null;
+    if (pointerLockSupported()) {
+      try {
+        this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
+      } catch (_) {
+        this.pointerLock = null;
+      }
     }
 
     this.raycaster = new THREE.Raycaster();
@@ -103,7 +109,13 @@ export class ColonyEngine {
     }
   }
 
+  _releasePointerLock() {
+    if (!this.pointerLock || !pointerLockSupported()) return;
+    try { this.pointerLock.unlock(); } catch (_) { /* iOS */ }
+  }
+
   setViewMode(mode) {
+    const wasFps = this.viewMode === 'fps';
     this.viewMode = mode;
     if (mode === 'fps') {
       this.controls.enabled = false;
@@ -118,7 +130,7 @@ export class ColonyEngine {
       this.fpsPivot.rotation.set(0, this._fpsYaw, 0);
       this.canvas.classList.add('fps-mode');
     } else {
-      this.pointerLock?.unlock();
+      if (wasFps) this._releasePointerLock();
       const fp = this.fpsPivot.position.clone();
       this.camera.removeFromParent();
       this.scene.add(this.camera);
@@ -138,9 +150,8 @@ export class ColonyEngine {
   }
 
   requestPointerLock() {
-    if (this.viewMode === 'fps' && !('ontouchstart' in window)) {
-      this.pointerLock.lock();
-    }
+    if (this.viewMode !== 'fps' || !this.pointerLock || !pointerLockSupported()) return;
+    try { this.pointerLock.lock(); } catch (_) { /* iOS */ }
   }
 
   setKey(code, down) {
@@ -745,7 +756,7 @@ export class ColonyEngine {
 
   dispose() {
     this._stopResize?.();
-    this.pointerLock?.unlock();
+    this._releasePointerLock();
     this.renderer.dispose();
   }
 }

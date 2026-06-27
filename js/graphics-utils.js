@@ -124,6 +124,12 @@ export function isMobileGPU() {
   return window.innerWidth < 700 || window.matchMedia('(pointer: coarse)').matches;
 }
 
+/** iOS Safari/Chrome — Pointer Lock API missing; Three.js unlock() throws. */
+export function pointerLockSupported() {
+  return typeof document.exitPointerLock === 'function'
+    && typeof document.body?.requestPointerLock === 'function';
+}
+
 /** Exact v8 init first; antialias-off is fallback only if context creation fails. */
 export function initWebGLRenderer(canvas) {
   const mobile = isMobileGPU();
