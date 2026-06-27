@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#060a12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Starfeet">
+  <title>Starfeet — Space Colony Strategy</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css?v=1">
+</head>
+<body>
+  <div id="app">
+
+    <!-- TITLE -->
+    <section id="title-screen" class="screen active">
+      <div class="title-stars"></div>
+      <div class="title-content">
+        <p class="title-tag">MT Ecosystem · Futuret3ch</p>
+        <h1 class="title-logo">STARFEET</h1>
+        <p class="title-tag">Space Colony Strategy</p>
+        <nav class="title-nav">
+          <button class="btn-primary" id="btn-new-game" type="button">New Expedition</button>
+          <button class="btn-secondary" id="btn-continue" type="button" style="display:none">Continue Colony</button>
+        </nav>
+      </div>
+      <footer class="title-credit">© 2026 Futuret3ch · Select a world · Build · Terraform · Explore</footer>
+    </section>
+
+    <!-- PLANET SELECT -->
+    <section id="select-screen" class="screen">
+      <div class="select-canvas-wrap">
+        <canvas id="select-canvas"></canvas>
+      </div>
+      <aside class="select-panel">
+        <button class="btn-secondary" id="btn-select-back" type="button" style="align-self:flex-start;min-width:auto;padding:0.4rem 1rem">← Back</button>
+        <h2>Choose Your World</h2>
+        <div id="planet-cards"></div>
+        <div class="planet-detail">
+          <h3 id="select-planet-name">Mars</h3>
+          <p id="select-planet-desc">Red frontier — rich iron, harsh dust storms</p>
+          <div id="planet-preview-swatch" style="background:#ff6b35"></div>
+          <p style="margin-top:0.5rem;font-size:0.8rem;color:var(--muted)">Difficulty: <span id="select-difficulty">Medium</span></p>
+        </div>
+        <label class="field-label" for="colony-name-input">Colony Name</label>
+        <input class="field-input" id="colony-name-input" type="text" value="Outpost Alpha" maxlength="32">
+        <button class="btn-primary" id="btn-launch" type="button" style="margin-top:auto">Launch Expedition →</button>
+      </aside>
+    </section>
+
+    <!-- COLONY -->
+    <section id="colony-screen" class="screen">
+      <div class="colony-canvas-wrap">
+        <canvas id="colony-canvas"></canvas>
+      </div>
+
+      <header class="hud-top">
+        <div class="hud-brand">
+          <div id="hud-colony">Outpost Alpha</div>
+          <div id="hud-planet">Mars</div>
+        </div>
+        <div class="hud-resources">
+          <span class="res-pill"><strong>₡</strong><span id="res-credits">0</span></span>
+          <span class="res-pill"><strong>⛏</strong><span id="res-minerals">0</span></span>
+          <span class="res-pill"><strong>⚡</strong><span id="res-energy">0</span></span>
+          <span class="res-pill"><strong>👥</strong><span id="res-pop">0</span></span>
+          <span class="res-pill"><strong>O₂</strong><span id="res-oxygen">0</span></span>
+          <span class="res-pill"><strong>🌾</strong><span id="res-food">0</span></span>
+        </div>
+        <div class="hud-actions">
+          <button class="icon-btn" id="btn-pause" type="button" title="Pause">⏸</button>
+          <button class="icon-btn" id="btn-menu" type="button" title="Main menu">☰</button>
+        </div>
+      </header>
+
+      <div class="terraform-wrap">
+        <div class="terraform-label">Terraform Progress</div>
+        <div class="terraform-track"><div id="terraform-bar"></div></div>
+        <div id="terraform-pct">0%</div>
+      </div>
+
+      <aside class="build-panel">
+        <h3>Construct</h3>
+        <div id="build-list"></div>
+        <p id="build-hint">Select a structure, then click the map</p>
+      </aside>
+
+      <button id="explore-btn" type="button">Explore Sectors</button>
+      <aside class="explore-panel" id="explore-panel">
+        <h3>Sector Map</h3>
+        <div id="explore-grid"></div>
+      </aside>
+    </section>
+
+    <div id="toast"></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="/js/main.js?v=1"></script>
+</body>
+</html>

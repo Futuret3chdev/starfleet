@@ -1,0 +1,4 @@
+mars-rover.glb — Poly Pizza "Mars Rover"
+exploration-rover.glb — Poly Pizza "Mars Exploration Rover"
+License: Creative Commons Attribution 3.0 (CC BY 3.0)
+https://creativecommons.org/licenses/by/3.0/

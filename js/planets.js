@@ -1,0 +1,97 @@
+/** Playable worlds — each with unique resources & terraform profile. */
+export const PLANETS = [
+  {
+    id: 'mars',
+    name: 'Mars',
+    tagline: 'Red frontier — rich iron, harsh dust storms',
+    color: 0xc1440e,
+    accent: '#ff6b35',
+    atmosphere: 0.006,
+    gravity: 0.38,
+    difficulty: 'Medium',
+    resources: { iron: 140, ice: 60, rare: 35 },
+    terraformBase: 0,
+    sky: 0x1a0a08,
+    fog: 0x3d1810,
+    seed: 42
+  },
+  {
+    id: 'luna',
+    name: 'Luna',
+    tagline: 'Earth\'s moon — helium-3 deposits, low gravity',
+    color: 0x9a9a9a,
+    accent: '#b8c5d6',
+    atmosphere: 0,
+    gravity: 0.17,
+    difficulty: 'Hard',
+    resources: { iron: 80, ice: 40, rare: 90 },
+    terraformBase: 0,
+    sky: 0x020208,
+    fog: 0x1a1a22,
+    seed: 7
+  },
+  {
+    id: 'titan',
+    name: 'Titan',
+    tagline: 'Methane lakes — exotic chemistry, thick haze',
+    color: 0xd4a055,
+    accent: '#f4c56a',
+    atmosphere: 1.45,
+    gravity: 0.14,
+    difficulty: 'Hard',
+    resources: { iron: 50, ice: 120, rare: 70 },
+    terraformBase: 2,
+    sky: 0x2a1808,
+    fog: 0x4a3018,
+    seed: 19
+  },
+  {
+    id: 'europa',
+    name: 'Europa',
+    tagline: 'Ice shell world — subsurface ocean energy',
+    color: 0xd8e8f0,
+    accent: '#7ec8e8',
+    atmosphere: 0.0001,
+    gravity: 0.13,
+    difficulty: 'Extreme',
+    resources: { iron: 40, ice: 200, rare: 110 },
+    terraformBase: 0,
+    sky: 0x040810,
+    fog: 0x182838,
+    seed: 88
+  },
+  {
+    id: 'venus',
+    name: 'Venus',
+    tagline: 'Cloud cities — brutal heat, acid atmosphere',
+    color: 0xe8c040,
+    accent: '#ffe566',
+    atmosphere: 92,
+    gravity: 0.91,
+    difficulty: 'Extreme',
+    resources: { iron: 70, ice: 10, rare: 130 },
+    terraformBase: 0,
+    sky: 0x2a2008,
+    fog: 0x5a4810,
+    seed: 33
+  },
+  {
+    id: 'ceres',
+    name: 'Ceres',
+    tagline: 'Asteroid belt hub — mining paradise',
+    color: 0x8a7a6a,
+    accent: '#c4b4a4',
+    atmosphere: 0,
+    gravity: 0.03,
+    difficulty: 'Easy',
+    resources: { iron: 180, ice: 90, rare: 50 },
+    terraformBase: 0,
+    sky: 0x080810,
+    fog: 0x181820,
+    seed: 55
+  }
+];
+
+export function getPlanet(id) {
+  return PLANETS.find((p) => p.id === id) || PLANETS[0];
+}
