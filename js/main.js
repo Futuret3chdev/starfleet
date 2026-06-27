@@ -8,6 +8,7 @@ import {
   newColony, placeBuilding, exploreSector, simulateTick, saveGame, loadGame,
   canAfford, isBuildingUnlocked, getBuildingLockReason, launchFleetMission, getIdleShips
 } from './game-state.js';
+import { primeCanvasSize } from './graphics-utils.js';
 import {
   bindUI, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid,
   updateEventBanner, updateFleetPanel, showVictory, showStageAdvance, toast
@@ -53,7 +54,14 @@ function startPlanetSelect() {
   const canvas = document.getElementById('select-canvas');
   if (!canvas) return;
   if (selectView) selectView.dispose();
-  selectView = new PlanetSelectView(canvas);
+  primeCanvasSize(canvas);
+  try {
+    selectView = new PlanetSelectView(canvas);
+  } catch (err) {
+    console.error('PlanetSelectView failed', err);
+    toast('Planet preview unavailable — pick a world from the list below');
+    selectView = null;
+  }
   selectedPlanetId = 'mars';
   selectView.setFeatured(selectedPlanetId);
   updatePlanetCard(getPlanet(selectedPlanetId), 'Outpost Alpha');
@@ -121,7 +129,12 @@ function beginColonyAfterLayout() {
     requestAnimationFrame(() => {
       startColonyLoop();
       [100, 400, 900].forEach((ms) => {
-        setTimeout(() => colonyEngine?.resize(), ms);
+        setTimeout(() => {
+          const canvas = document.getElementById('colony-canvas');
+          if (!canvas || !state) return;
+          if (!colonyEngine?.isReady) initColonyEngine(canvas);
+          colonyEngine?.resize();
+        }, ms);
       });
     });
   });
@@ -230,24 +243,39 @@ function toggleFPS() {
   if (mode === 'fps') colonyEngine.requestPointerLock();
 }
 
-function startColonyLoop() {
-  const canvas = document.getElementById('colony-canvas');
-  if (!canvas) return;
+function initColonyEngine(canvas) {
   colonyEngine?.dispose();
   const fb = document.getElementById('colony-fallback');
+  const wrap = canvas.parentElement;
+  wrap?.classList.remove('fallback-2d');
   if (fb) fb.hidden = true;
+
+  primeCanvasSize(canvas);
   try {
     colonyEngine = new ColonyEngine(canvas, state.planetId);
   } catch (err) {
     console.error('ColonyEngine failed', err);
     colonyEngine = null;
+  }
+
+  if (!colonyEngine?.isReady) {
+    colonyEngine = colonyEngine || null;
     if (fb) {
       fb.hidden = false;
-      fb.textContent = '3D view failed — use the bottom menu to build and manage your colony';
+      fb.textContent = '3D view unavailable — tap 🔨 Build below to play (game fully works)';
     }
+    wrap?.classList.add('fallback-2d');
     toast('3D view unavailable — menus still work');
   }
   colonyEngine?.resize();
+}
+
+function startColonyLoop() {
+  const canvas = document.getElementById('colony-canvas');
+  if (!canvas) return;
+
+  const boot = () => initColonyEngine(canvas);
+  boot();
   setupColonyInput(canvas);
 
   document.getElementById('explore-grid')?.addEventListener('explore-sector', (e) => {

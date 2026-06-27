@@ -102,6 +102,48 @@ export function makeTerrainTexture(planet, size = 512) {
   return tex;
 }
 
+/** Touch / narrow screens — use lighter WebGL settings. */
+export function isMobileGPU() {
+  return window.innerWidth < 700 || window.matchMedia('(pointer: coarse)').matches;
+}
+
+/** Try several WebGL configs — mobile GPUs often reject the first attempt. */
+export function createWebGLRenderer(canvas) {
+  const mobile = isMobileGPU();
+  const dpr = Math.min(window.devicePixelRatio || 1, mobile ? 1 : 2);
+  const attempts = [
+    { antialias: false, alpha: false, failIfMajorPerformanceCaveat: false, powerPreference: 'low-power', stencil: false },
+    { antialias: false, alpha: false, failIfMajorPerformanceCaveat: false, powerPreference: 'default' },
+    { antialias: false, alpha: true, failIfMajorPerformanceCaveat: false, powerPreference: 'low-power' }
+  ];
+  for (const opts of attempts) {
+    try {
+      const renderer = new THREE.WebGLRenderer({ canvas, ...opts });
+      const gl = renderer.getContext();
+      if (!gl || gl.isContextLost()) {
+        renderer.dispose();
+        continue;
+      }
+      renderer.setPixelRatio(dpr);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      return { renderer, dpr, mobile };
+    } catch (_) { /* try next config */ }
+  }
+  return { renderer: null, dpr, mobile };
+}
+
+/** Size canvas element before WebGL context creation. */
+export function primeCanvasSize(canvas) {
+  const parent = canvas?.parentElement;
+  if (!parent) return { w: 0, h: 0 };
+  const { w, h } = getParentSize(parent);
+  if (w < 2 || h < 2) return { w, h };
+  const dpr = Math.min(window.devicePixelRatio || 1, isMobileGPU() ? 1 : 2);
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  return { w, h, dpr };
+}
+
 /** Reliable size for WebGL parents — iOS often reports 0 until layout settles. */
 export function getParentSize(parent) {
   if (!parent) return { w: 0, h: 0 };

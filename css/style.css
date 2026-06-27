@@ -262,6 +262,13 @@ html, body {
   transform: translateZ(0);
   background: radial-gradient(ellipse at 50% 80%, rgba(40, 20, 10, 0.25), #060a12);
 }
+.colony-canvas-wrap.fallback-2d {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 55%, rgba(180, 80, 40, 0.35), transparent),
+    radial-gradient(ellipse 120% 80% at 50% 100%, rgba(20, 60, 100, 0.25), transparent),
+    radial-gradient(circle at 20% 20%, rgba(0, 229, 255, 0.08), transparent 40%),
+    #060a12;
+}
 #colony-canvas {
   position: absolute;
   inset: 0;

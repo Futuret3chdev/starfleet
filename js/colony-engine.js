@@ -4,7 +4,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { getPlanet } from './planets.js';
-import { makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize } from './graphics-utils.js';
+import {
+  makeHeightmap, makeTerrainTexture, observeCanvasResize, getParentSize,
+  createWebGLRenderer, isMobileGPU
+} from './graphics-utils.js';
 
 const ROVER_URL = '/assets/mars-rover.glb';
 
@@ -24,78 +27,95 @@ export class ColonyEngine {
     this._fpsYaw = 0;
     this._fpsPitch = 0;
     this._lastTf = -1;
+    this.mobileLite = isMobileGPU();
 
-    const dpr = Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.5 : 2);
-    try {
-      this.renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: dpr < 2,
-        alpha: false,
-        failIfMajorPerformanceCaveat: false,
-        powerPreference: 'default'
-      });
-    } catch (err) {
-      console.error('WebGL init failed', err);
-      this.renderer = null;
-      const fb = document.getElementById('colony-fallback');
-      if (fb) { fb.hidden = false; fb.textContent = '3D view unavailable on this device — use Build menu below to play'; }
-    }
+    const gpu = createWebGLRenderer(canvas);
+    this.renderer = gpu.renderer;
     if (this.renderer) {
-      this.renderer.setPixelRatio(dpr);
-      this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      this.renderer.shadowMap.enabled = !this.mobileLite;
+      if (!this.mobileLite) this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.2;
     }
 
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(this.planet.sky);
-    this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.0035);
-    this._barrenColor = new THREE.Color(this.planet.color);
-    this._lushColor = new THREE.Color(0x3d8a3d);
-    this._skyBarren = new THREE.Color(this.planet.sky);
-    this._skyLush = new THREE.Color(0x6ab8e8);
+    if (!this.renderer) {
+      this._showFallback('3D view unavailable — tap 🔨 Build below to play');
+      return;
+    }
 
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 800);
-    this.camera.position.set(28, 34, 48);
+    try {
+      this.scene = new THREE.Scene();
+      this.scene.background = new THREE.Color(this.planet.sky);
+      this.scene.fog = new THREE.FogExp2(this.planet.fog, 0.0035);
+      this._barrenColor = new THREE.Color(this.planet.color);
+      this._lushColor = new THREE.Color(0x3d8a3d);
+      this._skyBarren = new THREE.Color(this.planet.sky);
+      this._skyLush = new THREE.Color(0x6ab8e8);
 
-    this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.enableDamping = true;
-    this.controls.maxPolarAngle = Math.PI / 2.05;
-    this.controls.minDistance = 12;
-    this.controls.maxDistance = 130;
-    this.controls.target.set(0, 1, 0);
+      this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 800);
+      this.camera.position.set(28, 34, 48);
 
-    this.fpsPivot = new THREE.Object3D();
-    this.fpsPivot.position.set(0, 2.4, 18);
-    this.scene.add(this.fpsPivot);
-    this.fpsPivot.add(this.camera);
-    this.camera.position.set(0, 0, 0);
+      this.controls = new OrbitControls(this.camera, canvas);
+      this.controls.enableDamping = true;
+      this.controls.maxPolarAngle = Math.PI / 2.05;
+      this.controls.minDistance = 12;
+      this.controls.maxDistance = 130;
+      this.controls.target.set(0, 1, 0);
 
-    this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
+      this.fpsPivot = new THREE.Object3D();
+      this.fpsPivot.position.set(0, 2.4, 18);
+      this.scene.add(this.fpsPivot);
+      this.fpsPivot.add(this.camera);
+      this.camera.position.set(0, 0, 0);
 
-    this.raycaster = new THREE.Raycaster();
-    this.pointer = new THREE.Vector2();
-    this._buildSky();
-    this._buildWorld();
-    this._buildVegetation();
-    this._buildWater();
-    this._buildOrbitPaths();
-    this._buildLights();
-    this._buildDust();
-    this._buildPreviewRing();
-    this._loadRover();
+      this.pointerLock = new PointerLockControls(this.fpsPivot, canvas);
 
-    this._orbitCamPos = new THREE.Vector3(28, 34, 48);
-    this._orbitTarget = new THREE.Vector3(0, 1, 0);
-    this.camera.removeFromParent();
-    this.scene.add(this.camera);
-    this.camera.position.copy(this._orbitCamPos);
+      this.raycaster = new THREE.Raycaster();
+      this.pointer = new THREE.Vector2();
+      this._buildSky();
+      this._buildWorld();
+      this._buildVegetation();
+      this._buildWater();
+      this._buildOrbitPaths();
+      this._buildLights();
+      this._buildDust();
+      this._buildPreviewRing();
+      this._loadRover();
 
-    this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
-    this.setBuildMode(false);
-    this.setViewMode('orbit');
+      this._orbitCamPos = new THREE.Vector3(28, 34, 48);
+      this._orbitTarget = new THREE.Vector3(0, 1, 0);
+      this.camera.removeFromParent();
+      this.scene.add(this.camera);
+      this.camera.position.copy(this._orbitCamPos);
+
+      this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
+      this.setBuildMode(false);
+      this.setViewMode('orbit');
+    } catch (err) {
+      console.error('Colony scene init failed', err);
+      this.renderer?.dispose();
+      this.renderer = null;
+      this._showFallback('3D view unavailable — tap 🔨 Build below to play');
+      return;
+    }
+
+    this._onContextLost = (e) => {
+      e.preventDefault();
+      this._contextLost = true;
+      this._showFallback('3D paused — GPU memory low. Menus still work.');
+    };
+    canvas.addEventListener('webglcontextlost', this._onContextLost);
+  }
+
+  get isReady() {
+    return !!this.renderer && !this._contextLost;
+  }
+
+  _showFallback(msg) {
+    const fb = document.getElementById('colony-fallback');
+    const wrap = this.canvas?.parentElement;
+    if (fb) { fb.hidden = false; fb.textContent = msg; }
+    wrap?.classList.add('fallback-2d');
   }
 
   setBuildMode(active) {
@@ -221,7 +241,7 @@ export class ColonyEngine {
   }
 
   _buildSky() {
-    const skyGeo = new THREE.SphereGeometry(380, 32, 16);
+    const skyGeo = new THREE.SphereGeometry(380, this.mobileLite ? 16 : 32, this.mobileLite ? 8 : 16);
     const skyMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true });
     this.skyVerts = skyGeo.attributes.position;
     this.skyColors = new Float32Array(this.skyVerts.count * 3);
@@ -247,7 +267,7 @@ export class ColonyEngine {
 
   _buildWorld() {
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 1800;
+    const starCount = this.mobileLite ? 500 : 1800;
     const pos = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
       const r = 180 + Math.random() * 200;
@@ -260,8 +280,9 @@ export class ColonyEngine {
     starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     this.scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.4, sizeAttenuation: true })));
 
-    const hm = makeHeightmap(this.planet);
-    const segments = 128;
+    const hm = makeHeightmap(this.planet, this.mobileLite ? 128 : 256);
+    const segments = this.mobileLite ? 48 : 128;
+    this._terrainSegments = segments;
     const geo = new THREE.PlaneGeometry(200, 200, segments, segments);
     const verts = geo.attributes.position;
     this._groundVerts = verts;
@@ -276,7 +297,7 @@ export class ColonyEngine {
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
 
-    const groundTex = makeTerrainTexture(this.planet);
+    const groundTex = makeTerrainTexture(this.planet, this.mobileLite ? 256 : 512);
     this.groundMat = new THREE.MeshStandardMaterial({
       map: groundTex,
       roughness: 0.9,
@@ -285,7 +306,7 @@ export class ColonyEngine {
     });
     this.ground = new THREE.Mesh(geo, this.groundMat);
     this.ground.rotation.x = -Math.PI / 2;
-    this.ground.receiveShadow = true;
+    this.ground.receiveShadow = !this.mobileLite;
     this.scene.add(this.ground);
 
     this.pickPlane = new THREE.Mesh(
@@ -325,7 +346,8 @@ export class ColonyEngine {
     this.vegGroup = new THREE.Group();
     const treeMat = new THREE.MeshStandardMaterial({ color: 0x2d6b2d, roughness: 0.8 });
     const bushMat = new THREE.MeshStandardMaterial({ color: 0x3a8a3a, roughness: 0.85 });
-    for (let i = 0; i < 120; i++) {
+    const vegCount = this.mobileLite ? 30 : 120;
+    for (let i = 0; i < vegCount; i++) {
       const x = (Math.random() - 0.5) * 170;
       const z = (Math.random() - 0.5) * 170;
       if (Math.hypot(x, z) < 14) continue;
@@ -349,14 +371,16 @@ export class ColonyEngine {
     this.scene.add(this.ambient);
     this.sun = new THREE.DirectionalLight(0xffeedd, 1.5);
     this.sun.position.set(55, 75, 35);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.near = 10;
-    this.sun.shadow.camera.far = 200;
-    this.sun.shadow.camera.left = -70;
-    this.sun.shadow.camera.right = 70;
-    this.sun.shadow.camera.top = 70;
-    this.sun.shadow.camera.bottom = -70;
+    this.sun.castShadow = !this.mobileLite;
+    if (!this.mobileLite) {
+      this.sun.shadow.mapSize.set(1024, 1024);
+      this.sun.shadow.camera.near = 10;
+      this.sun.shadow.camera.far = 200;
+      this.sun.shadow.camera.left = -70;
+      this.sun.shadow.camera.right = 70;
+      this.sun.shadow.camera.top = 70;
+      this.sun.shadow.camera.bottom = -70;
+    }
     this.scene.add(this.sun);
     this.scene.add(new THREE.HemisphereLight(0x88aacc, 0x221108, 0.5));
   }
@@ -408,7 +432,7 @@ export class ColonyEngine {
 
   _terrainHeight(x, z) {
     if (!this.ground) return 0;
-    const segments = 128;
+    const segments = this._terrainSegments || 128;
     const half = 100;
     const u = THREE.MathUtils.clamp((x + half) / 200, 0, 1);
     const v = THREE.MathUtils.clamp((z + half) / 200, 0, 1);
@@ -730,7 +754,7 @@ export class ColonyEngine {
   }
 
   render(t = 0, dt = 0.016) {
-    if (!this.renderer) return;
+    if (!this.isReady) return;
     this._updateFPS(dt);
     if (this.dust && this.stormIntensity > 0.05) {
       const pos = this.dust.geometry.attributes.position;
@@ -747,6 +771,7 @@ export class ColonyEngine {
 
   dispose() {
     this._stopResize?.();
+    this.canvas?.removeEventListener('webglcontextlost', this._onContextLost);
     this.pointerLock?.unlock();
     this.renderer?.dispose();
   }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PLANETS } from './planets.js';
-import { makePlanetTexture, observeCanvasResize, getParentSize } from './graphics-utils.js';
+import { makePlanetTexture, observeCanvasResize, getParentSize, createWebGLRenderer, primeCanvasSize } from './graphics-utils.js';
 
 export class PlanetSelectView {
   constructor(canvas, onSelect) {
@@ -9,9 +9,10 @@ export class PlanetSelectView {
     this._hovered = null;
     this._featuredId = PLANETS[0].id;
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    primeCanvasSize(canvas);
+    const gpu = createWebGLRenderer(canvas);
+    this.renderer = gpu.renderer;
+    if (!this.renderer) throw new Error('WebGL unavailable');
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
 
