@@ -103,7 +103,14 @@ function continueGame() {
 }
 
 function beginColonyAfterLayout() {
-  requestAnimationFrame(() => requestAnimationFrame(() => startColonyLoop()));
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      startColonyLoop();
+      [100, 400, 900].forEach((ms) => {
+        setTimeout(() => colonyEngine?.resize(), ms);
+      });
+    });
+  });
 }
 
 function launchMission(missionId) {
@@ -179,6 +186,7 @@ function setupMobileJoy() {
 }
 
 function tryPlaceBuilding(clientX, clientY) {
+  if (!colonyEngine?.pickGround) return;
   const pos = colonyEngine.pickGround(clientX, clientY);
   if (!pos) { toast('Click cyan ring — not landing pad'); return; }
   if (!isBuildingUnlocked(state, selectedBuild)) { toast(`🔒 ${getBuildingLockReason(state, selectedBuild)}`); return; }

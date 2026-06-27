@@ -108,7 +108,7 @@ export class ColonyEngine {
       this.fpsPivot.rotation.set(0, this._fpsYaw, 0);
       this.canvas.classList.add('fps-mode');
     } else {
-      this.pointerLock.unlock();
+      this.pointerLock?.unlock();
       const fp = this.fpsPivot.position.clone();
       this.camera.removeFromParent();
       this.scene.add(this.camera);
@@ -695,7 +695,8 @@ export class ColonyEngine {
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hits = this.raycaster.intersectObjects([this.pickPlane, this.ground].filter(Boolean), false);
+    if (!this.pickPlane) return null;
+    const hits = this.raycaster.intersectObject(this.pickPlane, false);
     if (!hits.length) return null;
     const p = hits[0].point;
     if (Math.hypot(p.x, p.z) < 8) return null;

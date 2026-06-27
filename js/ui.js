@@ -47,12 +47,31 @@ export function bindUI(handlers) {
     panel?.classList.remove('collapsed');
   });
 
+  document.getElementById('mob-build')?.addEventListener('click', () => {
+    closeMobilePanels('build-panel');
+    openPanel('build-panel');
+  });
+  document.getElementById('mob-fleet')?.addEventListener('click', () => {
+    closeMobilePanels('fleet-panel');
+    const panel = document.getElementById('fleet-panel');
+    panel?.classList.add('open');
+    panel?.classList.remove('collapsed');
+  });
+  document.getElementById('mob-explore')?.addEventListener('click', () => {
+    closeMobilePanels('explore-panel');
+    const panel = document.getElementById('explore-panel');
+    panel?.classList.add('open');
+    panel?.classList.remove('collapsed');
+  });
+  document.getElementById('mob-menu')?.addEventListener('click', () => handlers.onMenu?.());
+
   buildBuildList(handlers.onSelectBuild);
   buildFleetMissions(handlers.onLaunchMission);
 
-  if (window.innerWidth < 768) {
+  if (isMobile()) {
     document.getElementById('build-panel')?.classList.add('collapsed');
     document.getElementById('fleet-panel')?.classList.add('collapsed');
+    document.getElementById('explore-panel')?.classList.remove('open');
   }
 
   return { show, updateHUD, updatePlanetCard, updateBuildPanel, updateExploreGrid, updateEventBanner, updateFleetPanel, updateStageTimeline, showVictory, showStageAdvance, toast };
@@ -101,8 +120,23 @@ function togglePanel(id) {
   document.getElementById(id)?.classList.toggle('collapsed');
 }
 
+function isMobile() {
+  return window.matchMedia('(max-width: 700px)').matches;
+}
+
+function closeMobilePanels(exceptId) {
+  ['build-panel', 'fleet-panel', 'explore-panel'].forEach((id) => {
+    if (id === exceptId) return;
+    const el = document.getElementById(id);
+    el?.classList.add('collapsed');
+    if (id !== 'build-panel') el?.classList.remove('open');
+  });
+}
+
 function openPanel(id) {
-  document.getElementById(id)?.classList.remove('collapsed');
+  const el = document.getElementById(id);
+  el?.classList.remove('collapsed');
+  if (id === 'fleet-panel' || id === 'explore-panel') el?.classList.add('open');
 }
 
 export function updateStageTimeline(state) {
@@ -211,7 +245,7 @@ export function updateHUD(state) {
   const energyPill = energyEl?.closest('.res-pill');
   if (energyEl) {
     energyEl.textContent = `${Math.floor(power.stored)}/${power.cap} (${netLabel})`;
-    energyEl.title = `Stored ${Math.floor(power.stored)}/${power.cap} · Gen +${Math.round(power.gen)} · Demand −${Math.round(power.use)}`;
+    energyEl.title = `Stored ${Math.floor(power.stored)}/${power.cap} · Generation +${Math.round(power.gen)} · Demand −${Math.round(power.use)}`;
   }
   energyPill?.classList.toggle('power-deficit', power.gen > 0 && power.net < 0);
   energyPill?.classList.toggle('power-surplus', power.net > 0);
