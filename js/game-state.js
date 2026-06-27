@@ -84,7 +84,7 @@ export function canAfford(state, cost) {
 export function placeBuilding(state, type, x, z) {
   const def = BUILDINGS[type];
   if (!def || !canAfford(state, def.cost)) return false;
-  const occupied = state.buildings.some((b) => Math.hypot(b.x - x, b.z - z) < 5);
+  const occupied = state.buildings.some((b) => Math.hypot(b.x - x, b.z - z) < 4.5);
   if (occupied) return false;
 
   state.credits -= def.cost.credits || 0;

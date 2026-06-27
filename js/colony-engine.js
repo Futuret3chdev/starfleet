@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MOUSE } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { getPlanet } from './planets.js';
@@ -48,6 +49,17 @@ export class ColonyEngine {
     this._loadRover();
 
     this._stopResize = observeCanvasResize(canvas.parentElement, () => this.resize());
+    this.setBuildMode(false);
+  }
+
+  setBuildMode(active) {
+    this._buildMode = active;
+    if (active) {
+      this.controls.mouseButtons = { LEFT: null, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
+      this.controls.enablePan = true;
+    } else {
+      this.controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+    }
   }
 
   _buildPreviewRing() {
@@ -124,6 +136,8 @@ export class ColonyEngine {
       verts.setY(i, hm.data[hy * hm.size + hx] * 5);
     }
     geo.computeVertexNormals();
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
 
     const groundTex = makeTerrainTexture(this.planet);
     const groundMat = new THREE.MeshStandardMaterial({
@@ -137,6 +151,23 @@ export class ColonyEngine {
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.receiveShadow = true;
     this.scene.add(this.ground);
+
+    // Flat invisible plane — reliable click-to-build raycasting
+    this.pickPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(220, 220),
+      new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide })
+    );
+    this.pickPlane.rotation.x = -Math.PI / 2;
+    this.pickPlane.position.y = 0.08;
+    this.scene.add(this.pickPlane);
+
+    const zoneMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.12, side: THREE.DoubleSide });
+    [15, 22, 30].forEach((r) => {
+      const zone = new THREE.Mesh(new THREE.RingGeometry(r - 0.3, r + 0.3, 64), zoneMat);
+      zone.rotation.x = -Math.PI / 2;
+      zone.position.y = 0.1;
+      this.scene.add(zone);
+    });
 
     const pad = new THREE.Mesh(
       new THREE.CircleGeometry(11, 48),
@@ -397,10 +428,12 @@ export class ColonyEngine {
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hits = this.raycaster.intersectObject(this.ground);
+    const targets = [this.pickPlane, this.ground].filter(Boolean);
+    const hits = this.raycaster.intersectObjects(targets, false);
     if (!hits.length) return null;
     const p = hits[0].point;
-    if (Math.hypot(p.x, p.z) < 10) return null;
+    const dist = Math.hypot(p.x, p.z);
+    if (dist < 8) return null;
     return { x: p.x, z: p.z };
   }
 

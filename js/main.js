@@ -25,6 +25,8 @@ function init() {
     onMenu: () => { stopColony(); ui.show('title'); },
     onSelectBuild: (id) => {
       selectedBuild = selectedBuild === id ? null : id;
+      colonyEngine?.setBuildMode(!!selectedBuild);
+      colonyEngine?.setBuildPreview(selectedBuild ? selectedBuild : null);
       updateBuildPanel(state, selectedBuild);
     },
     onExplore: () => document.getElementById('explore-panel')?.classList.toggle('open')
@@ -142,24 +144,14 @@ function startColonyLoop() {
   colonyEngine = new ColonyEngine(canvas, state.planetId);
   colonyEngine.resize();
 
-  let pointerDown = null;
-  canvas.onpointerdown = (e) => {
-    if (e.button !== 0) return;
-    pointerDown = { x: e.clientX, y: e.clientY };
-    colonyEngine.setBuildPreview(selectedBuild, e.clientX, e.clientY);
-  };
   canvas.onpointermove = (e) => {
     if (selectedBuild) colonyEngine.setBuildPreview(selectedBuild, e.clientX, e.clientY);
   };
-  canvas.onpointerup = (e) => {
-    if (e.button !== 0 || !pointerDown) return;
-    const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
-    pointerDown = null;
-    if (moved > 8) return;
+  canvas.onclick = (e) => {
     if (!selectedBuild || !state) return;
     const pos = colonyEngine.pickGround(e.clientX, e.clientY);
     if (!pos) {
-      toast('Click open terrain away from the landing pad');
+      toast('Click the cyan rings — not on the landing pad');
       return;
     }
     const def = BUILDINGS[selectedBuild];
@@ -170,13 +162,14 @@ function startColonyLoop() {
     if (placeBuilding(state, selectedBuild, pos.x, pos.z)) {
       toast(`${def.name} constructed`);
       selectedBuild = null;
+      colonyEngine.setBuildMode(false);
       colonyEngine.setBuildPreview(null);
       colonyEngine.syncState(state);
       updateBuildPanel(state, null);
       updateHUD(state);
       saveGame(state);
     } else {
-      toast('Too close to another building — try further out');
+      toast('Too close to another building — try a cyan ring');
     }
   };
 

@@ -101,11 +101,11 @@ export function updateBuildPanel(state, selectedBuild) {
   const hint = document.getElementById('build-hint');
   if (hint) {
     if (!selectedBuild) {
-      hint.textContent = 'Select a structure, then click the terrain';
+      hint.textContent = 'Select a structure, then left-click the cyan rings';
     } else if (!canAfford(state, BUILDINGS[selectedBuild].cost)) {
       hint.textContent = `Need ₡${BUILDINGS[selectedBuild].cost.credits} · ⛏${BUILDINGS[selectedBuild].cost.minerals} — gather more resources`;
     } else {
-      hint.textContent = `Click terrain to place ${BUILDINGS[selectedBuild].name}`;
+      hint.textContent = `Left-click a cyan ring to place ${BUILDINGS[selectedBuild].name} · Right-drag to look`;
     }
   }
 }
