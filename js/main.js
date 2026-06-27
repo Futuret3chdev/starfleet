@@ -96,6 +96,7 @@ function launchColony() {
   startColonyLoop();
   ui.show('colony');
   toast(`Colony established on ${getPlanet(selectedPlanetId).name}`);
+  setTimeout(() => toast('Build Solar Array + Habitat, then Mine & Garage for harvest trucks'), 3200);
 }
 
 function continueGame() {

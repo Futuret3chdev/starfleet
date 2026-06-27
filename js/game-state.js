@@ -86,16 +86,16 @@ export function placeBuilding(state, type, x, z) {
 
   if (def.popCap) state.popCap += def.popCap;
   if (def.storage) state.storage += def.storage;
-  if (def.truckCap) spawnTrucks(state, def.truckCap);
+  if (def.truckCap) spawnTrucks(state, def.truckCap, x, z);
   return true;
 }
 
-function spawnTrucks(state, count) {
+function spawnTrucks(state, count, x = 0, z = 0) {
   for (let i = 0; i < count; i++) {
     state.trucks.push({
       id: `truck-${Date.now()}-${i}`,
-      x: 0,
-      z: 0,
+      x,
+      z,
       targetNode: null,
       cargo: 0,
       phase: 'idle',
